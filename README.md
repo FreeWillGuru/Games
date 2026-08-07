@@ -1,2 +1,2 @@
 # Games
-My games
+My games.
