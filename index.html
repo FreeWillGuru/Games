@@ -1,0 +1,2091 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Mini Stratego – Växlaren 1.2</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:#17202a;color:#f4f4f4;font-family:system-ui,-apple-system,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;padding:8px}
+h1{font-size:21px;margin:2px 0 4px}
+#status{min-height:28px;font-size:14px;text-align:center;margin-bottom:6px}
+#board{width:min(96vw,650px);height:min(96vw,650px);display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(10,1fr);border:3px solid #b9a36b;background:#b9a36b;gap:1px}
+.sq{display:flex;align-items:center;justify-content:center;position:relative;background:#d8c58c;min-width:0;min-height:0;touch-action:manipulation;overflow:hidden}
+.sq:nth-child(odd){background:#cfb979}
+.lake{background:#4c87a8!important}
+.lake:after{content:"≈";font-size:clamp(18px,5vw,34px);color:#bfe7f5;opacity:.9}
+.piece{width:90%;height:90%;border-radius:9px;border:2px solid #e6bd55;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;font-weight:900;line-height:1;box-shadow:0 3px 7px rgba(0,0,0,.45),inset 0 2px 0 rgba(255,255,255,.24),inset 0 -2px 0 rgba(0,0,0,.22);user-select:none;-webkit-user-select:none;position:relative;overflow:hidden}
+.red{background:linear-gradient(145deg,#c83a33,#8f1717 72%)}
+.blue{background:linear-gradient(145deg,#3b6ec8,#173d8f 72%);border-color:#9dc2ff}
+.hidden .sym{font-size:clamp(16px,5vw,30px);color:#dfe9ff}
+.piece:before{content:"";position:absolute;inset:3px;border:1px solid rgba(255,226,137,.48);border-radius:6px;pointer-events:none}
+.piece .sym{font-size:clamp(16px,4.7vw,30px);text-shadow:0 1px 2px rgba(0,0,0,.55);z-index:1}
+.piece .rank{font-size:clamp(10px,2.7vw,16px);margin-top:2px;color:#fff7cf;text-shadow:0 1px 2px rgba(0,0,0,.7);z-index:1}
+.flag .sym{color:#ffd84d}.bomb .sym{color:#1e1e1e}.spy .sym{color:#d7a1ff}.scout .sym{color:#8fdcff}.miner .sym{color:#ffad55}.low .sym{color:#8ef0a6}.mid .sym{color:#91bfff}.high .sym{color:#d5b2ff}.marshal .sym{color:#ffd84d}
+.selected .piece{outline:4px solid #fff06a;outline-offset:2px;transform:translateY(-2px) scale(1.03)}
+.target{box-shadow:inset 0 0 0 5px rgba(70,230,110,.65)}
+#controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:9px}
+button,select{min-height:43px;padding:0 13px;border-radius:10px;border:1px solid #aaa;background:#283747;color:#fff;font-size:15px}
+#legend{max-width:650px;margin-top:8px;font-size:11px;line-height:1.4;color:#ccd3d8;text-align:center}
+#history{width:min(96vw,650px);max-height:120px;overflow:auto;margin-top:8px;padding:8px 10px;border-radius:10px;background:#101820;border:1px solid #40515f;font-size:12px;line-height:1.45;color:#dce5ea}
+#history:empty{display:none}
+#battle{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:20}
+#battleBox{background:#1f2b38;border:2px solid #d7c37a;border-radius:18px;padding:18px 22px;text-align:center;min-width:260px}
+#battleRow{display:flex;align-items:center;justify-content:center;gap:16px;font-size:34px;margin:14px 0}
+#battleRow .piece{width:72px;height:72px;flex:none}
+#continueBattle{display:none;margin:8px auto 0;background:#3b536b;border-color:#d7c37a}
+#creatorCredit{
+  width:min(96vw,650px);
+  margin:8px auto 14px;
+  text-align:center;
+  font-size:12px;
+  color:#9eabb5;
+  letter-spacing:.2px;
+}
+
+#lossPanel{width:min(96vw,650px);margin:7px auto;padding:7px 9px;border:1px solid #53606a;border-radius:9px;font-size:12px;color:#d7dde2;background:#20272d}
+#lossPanel strong{display:block;margin-bottom:3px}
+#lossList{display:flex;flex-wrap:wrap;gap:5px 10px}
+
+.sq.last-ai-move{
+  outline:3px solid #ffd166;
+  outline-offset:-3px;
+  box-shadow:inset 0 0 0 2px rgba(0,0,0,.45);
+}
+</style>
+</head>
+<body>
+<h1>Mini Stratego</h1>
+<div id="status">Uppställning: tryck på två pjäser för att byta plats.</div>
+<div id="board"></div>
+<div id="controls">
+<button id="smart">Slumpa vettigt</button>
+<button id="random">Helt slumpat</button>
+<select id="playerColor" aria-label="Spelfärg">
+<option value="red" selected>Spela rött</option>
+<option value="blue">Spela blått</option>
+</select>
+<select id="difficulty" aria-label="Svårighetsgrad">
+<option value="captain" selected>Kapten</option>
+<option value="colonel">Överste</option>
+</select>
+<button id="start">Starta spel</button><button id="resume" style="display:none">Fortsätt sparat parti</button>
+<button id="drawOffer" style="display:none">Bjud oavgjort</button>
+<button id="undoMove" style="display:none">Ta tillbaka senaste draget</button>
+<button id="replayAI" style="display:none">Låt datorn spela igen</button>
+<button id="new" style="display:none">Nytt parti</button><button id="clearSave" style="display:none">Radera sparat</button>
+</div>
+<div id="legend">Kapten: minneshjälp. Överste: klassiskt minne. Samma AI i båda lägena. Växlaren 1.2: samma ställningsstyrda motor, men den kan nu ge upp vid ett stabilt och tydligt underläge i stridsvärde och toppofficer, så hopplösa slutspel inte behöver räknas i 10–15 sekunder per drag.</div>
+<div id="lossPanel"><strong>Datorns förluster</strong><div id="lossList">Inga ännu</div></div>
+<div id="history"></div>
+
+<div id="battle"><div id="battleBox"><div id="battleText"></div><div id="battleRow"></div><button id="continueBattle">Fortsätt</button></div></div>
+
+<script>
+(function(){
+const boardEl=document.getElementById('board'),status=document.getElementById('status');
+const battle=document.getElementById('battle'),battleText=document.getElementById('battleText'),battleRow=document.getElementById('battleRow');
+const continueBattle=document.getElementById('continueBattle'),historyEl=document.getElementById('history');
+const defs=[
+{id:'F',sym:'⚑',name:'Flagga',n:1},{id:'B',sym:'✹',name:'Bomb',n:6},{id:'S',sym:'◈',name:'Spion',n:1},
+{id:'2',sym:'➶',name:'Spejare',n:8},{id:'3',sym:'⚒',name:'Minör',n:5},{id:'4',sym:'▪',name:'Sergeant',n:4},
+{id:'5',sym:'▪',name:'Löjtnant',n:4},{id:'6',sym:'▪',name:'Kapten',n:4},{id:'7',sym:'★',name:'Major',n:3},
+{id:'8',sym:'★',name:'Överste',n:2},{id:'9',sym:'★',name:'General',n:1},{id:'10',sym:'★',name:'Marskalk',n:1}
+];
+const map=Object.fromEntries(defs.map(d=>[d.id,d]));
+let mode='setup', setup=[], board=Array(100).fill(null), selected=null, targets=[], busy=false, gameOver=false, history=[];
+let difficulty='hard', memoryMode='open', playerSide='red', aiSide='blue', boardFlipped=false;
+let aiLosses={};
+let lastAiMoveSquare=null;
+let aiMoveCount=0;
+let aiSeenHuman=new Set();
+let aiMoveHistory=[];
+let undoSnapshot=null;
+let awaitingAiReplay=false;
+let humanKnownLosses={};
+let lastEngineStats={timeMs:0,depth:0,nodes:0};
+let flankActivity={left:0,right:0};
+let humanActivity={};
+let switcherPhase='defensiv';
+let resignBadCount=0;
+let humanRetreatTrail=[];
+let turnCount=0, reserveMiner=null, humanMoved=new Set();
+const SAVE_KEY='miniStrategoSwitcherStandardV12';
+
+function pieceClass(id){
+ if(id==='F')return'flag';if(id==='B')return'bomb';if(id==='S')return'spy';if(id==='2')return'scout';
+ if(id==='3')return'miner';if(['4','5','6'].includes(id))return'low';if(['7','8'].includes(id))return'mid';
+ if(id==='9')return'high';if(id==='10')return'marshal';return'';
+}
+function bag(){let a=[];defs.forEach(d=>{for(let i=0;i<d.n;i++)a.push(d.id)});return a}
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function smart(){
+ let cells=Array(40).fill(null),back=[30,31,32,33,34,35,36,37,38,39];
+ let flag=back[Math.floor(Math.random()*back.length)];cells[flag]='F';
+ let near=[],fr=Math.floor(flag/10),fc=flag%10;
+ for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){let r=fr+dr,c=fc+dc,i=r*10+c;if(r>=0&&r<4&&c>=0&&c<10&&i!==flag)near.push(i)}
+ shuffle(near);let bombs=6;for(let i=0;i<Math.min(3,near.length)&&bombs;i++){cells[near[i]]='B';bombs--}
+ let empt=cells.map((v,i)=>v===null?i:null).filter(v=>v!==null);shuffle(empt);while(bombs){cells[empt.pop()]='B';bombs--}
+ let remaining=bag();remaining.splice(remaining.indexOf('F'),1);for(let i=0;i<6;i++)remaining.splice(remaining.indexOf('B'),1);
+ let front=cells.map((v,i)=>v===null&&i<20?i:null).filter(v=>v!==null);shuffle(front);
+ for(let id of ['2','2','2','2','3','3','3']){if(!front.length)break;let s=front.pop();cells[s]=id;remaining.splice(remaining.indexOf(id),1)}
+ let rest=cells.map((v,i)=>v===null?i:null).filter(v=>v!==null);shuffle(rest);shuffle(remaining);rest.forEach((s,i)=>cells[s]=remaining[i]);return cells;
+}
+
+function smartAI(){
+ // Egen defensiv datoruppställning. Lokala index 0–9 är främsta raden,
+ // 30–39 är bakre raden oavsett vilken färg datorn får.
+ let cells=Array(40).fill(null);
+
+ // Flagga långt bak med 3–4 bomber i närheten.
+ const back=[30,31,32,33,34,35,36,37,38,39];
+ const flag=back[Math.floor(Math.random()*back.length)];
+ cells[flag]='F';
+ let near=[],fr=Math.floor(flag/10),fc=flag%10;
+ for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+   let r=fr+dr,c=fc+dc,i=r*10+c;
+   if(r>=2&&r<4&&c>=0&&c<10&&i!==flag)near.push(i);
+ }
+ shuffle(near);
+ let bombs=6;
+ const closeBombs=Math.min(4,near.length);
+ for(let i=0;i<closeBombs&&bombs;i++){
+   if(cells[near[i]]===null){cells[near[i]]='B';bombs--;}
+ }
+
+ // Fyra kaptener (6) långt fram, ganska utspridda.
+ const frontSlots=shuffle([0,1,2,3,4,5,6,7,8,9]);
+ const captainCols=[];
+ for(let k=0;k<4;k++){
+   const s=frontSlots.pop();
+   cells[s]='6';
+   captainCols.push(s%10);
+ }
+
+ // Gardering bakom kaptenerna med högre befäl, men marskalken hålls hellre undan.
+ const guards=shuffle(['7','7','8','9']);
+ for(let k=0;k<captainCols.length;k++){
+   const s=10+captainCols[k];
+   if(cells[s]===null)cells[s]=guards[k];
+ }
+
+ // Resten fylls från korrekt pjäsuppsättning.
+ let remaining=bag();
+ for(const id of cells){
+   if(id!==null){
+     const j=remaining.indexOf(id);
+     if(j>=0)remaining.splice(j,1);
+   }
+ }
+
+ // Återstående bomber läggs hellre bak än fram.
+ let rearEmpty=[];
+ for(let i=20;i<40;i++)if(cells[i]===null)rearEmpty.push(i);
+ shuffle(rearEmpty);
+ while(bombs>0&&rearEmpty.length){
+   const s=rearEmpty.pop();
+   cells[s]='B';
+   const j=remaining.indexOf('B'); if(j>=0)remaining.splice(j,1);
+   bombs--;
+ }
+
+ // Några spejare/lägre befäl får frontplatserna, men minörer hålls helst längre bak.
+ let frontEmpty=[];
+ for(let i=0;i<20;i++)if(cells[i]===null)frontEmpty.push(i);
+ shuffle(frontEmpty);
+ for(const id of ['2','2','2','4','4','5','5']){
+   if(!frontEmpty.length)break;
+   const j=remaining.indexOf(id);
+   if(j<0)continue;
+   const s=frontEmpty.pop();
+   cells[s]=id;
+   remaining.splice(j,1);
+ }
+
+ let empt=cells.map((v,i)=>v===null?i:null).filter(v=>v!==null);
+ shuffle(empt); shuffle(remaining);
+ empt.forEach((s,i)=>cells[s]=remaining[i]);
+ return cells;
+}
+
+function isLake(r,c){return(r===4||r===5)&&((c===2||c===3)||(c===6||c===7))}
+function movable(id){return id!=='F'&&id!=='B'}
+function strength(id){if(id==='S')return 1;if(id==='F')return 0;if(id==='B')return 99;return Number(id)}
+function makePiece(id,color,hidden=false){
+ let d=map[id],p=document.createElement('div');
+ p.className='piece '+color+' '+pieceClass(id)+(hidden?' hidden':'');
+ if(hidden)p.innerHTML='<div class="sym">?</div>';
+ else p.innerHTML='<div class="sym">'+d.sym+'</div><div class="rank">'+id+'</div>';
+ return p;
+}
+function setupTap(i){
+ if(selected===null){selected=i;status.textContent='Välj pjäsen som den ska byta plats med.';draw();return}
+ if(selected===i){selected=null;status.textContent='Markeringen togs bort.';draw();return}
+ [setup[selected],setup[i]]=[setup[i],setup[selected]];selected=null;status.textContent='Pjäserna bytte plats.';draw();
+}
+function legalMoves(pos){
+ let piece=board[pos];if(!piece||piece.side!==playerSide||!movable(piece.id))return[];
+ let [r,c]=[Math.floor(pos/10),pos%10],out=[];
+ let dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+ let max=String(piece.id)==='2'?9:1;
+ for(let [dr,dc] of dirs){
+  for(let s=1;s<=max;s++){
+   let nr=r+dr*s,nc=c+dc*s;if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;
+   let j=nr*10+nc,target=board[j];
+   if(!target)out.push(j);
+   else{if(target.side!==playerSide)out.push(j);break}
+  }
+ }
+ return out;
+}
+function allMoves(side){
+ let all=[];
+ for(let i=0;i<100;i++){
+  let p=board[i];if(!p||p.side!==side||!movable(p.id))continue;
+  let [r,c]=[Math.floor(i/10),i%10],dirs=[[-1,0],[1,0],[0,-1],[0,1]],max=String(p.id)==='2'?9:1;
+  for(let [dr,dc] of dirs)for(let s=1;s<=max;s++){
+   let nr=r+dr*s,nc=c+dc*s;if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;
+   let j=nr*10+nc,t=board[j];
+   if(!t)all.push([i,j]);
+   else{if(t.side!==side)all.push([i,j]);break}
+  }
+ }
+ return all;
+}
+function battleResult(a,d){
+ const attacker=String(a.id),defender=String(d.id);
+ if(defender==='F')return 1;
+ if(defender==='B')return attacker==='3'?1:-1;
+ // Spionen besegrar marskalken endast när spionen anfaller.
+ if(attacker==='S'&&defender==='10')return 1;
+ // Marskalken besegrar spionen när marskalken anfaller.
+ if(attacker==='10'&&defender==='S')return 1;
+ const sa=strength(attacker),sd=strength(defender);
+ return sa>sd?1:sa<sd?-1:0;
+}
+function addHistory(a,d,result){
+ const sideA=a.side==='red'?'Röd':'Blå',sideD=d.side==='red'?'röd':'blå';
+ const outcome=result>0?'vann':result<0?'förlorade':'tog ut båda';
+ let line;
+ if(result===0) line=sideA+' '+map[a.id].name+' mötte '+sideD+' '+map[d.id].name+' – båda försvann.';
+ else line=sideA+' '+map[a.id].name+' angrep '+sideD+' '+map[d.id].name+' och '+outcome+'.';
+ history.unshift(line);
+ history=history.slice(0,12);
+ historyEl.innerHTML=history.map(x=>'• '+x).join('<br>');
+}
+function showBattle(a,d,result,cb){
+ const attacker=map[a.id],defender=map[d.id];
+ battleText.innerHTML=
+   '<strong>'+attacker.name+' ('+a.id+')</strong> angriper <strong>'+
+   defender.name+' ('+d.id+')</strong><br>'+
+   (result>0?'Anfallaren vinner':result<0?'Försvararen vinner':'Båda slås ut');
+ battleRow.innerHTML='';
+ battleRow.appendChild(makePiece(a.id,a.side==='red'?'red':'blue',false));
+ let x=document.createElement('div');x.textContent='⚔️';battleRow.appendChild(x);
+ battleRow.appendChild(makePiece(d.id,d.side==='red'?'red':'blue',false));
+ continueBattle.style.display='inline-block';
+ battle.style.display='flex';
+
+ const finish=()=>{
+   continueBattle.onclick=null;
+   continueBattle.style.display='none';
+   battle.style.display='none';
+   cb();
+ };
+ continueBattle.onclick=finish;
+}
+
+function updateLossPanel(){
+ const panel=document.getElementById('lossPanel'), box=document.getElementById('lossList');
+ if(!panel||!box)return;
+ if(memoryMode==='memory'){panel.style.display='none';return}
+ panel.style.display='block';
+ const order=['10','9','8','7','6','5','4','3','2','S','B','F'];
+ const parts=[];
+ for(const id of order){
+   const n=aiLosses[id]||0;
+   if(n)parts.push(map[id].name+' ×'+n);
+ }
+ box.textContent=parts.length?parts.join(' · '):'Inga ännu';
+}
+function recordAiLoss(piece){
+ if(!piece||piece.side!==aiSide)return;
+ aiLosses[piece.id]=(aiLosses[piece.id]||0)+1;
+ updateLossPanel();
+}
+
+
+
+function recordHumanKnownLoss(piece){
+ if(!piece||piece.side!==playerSide)return;
+ humanKnownLosses[piece.id]=(humanKnownLosses[piece.id]||0)+1;
+}
+
+function cloneBoardForUndo(){
+ return board.map(p=>p?{...p}:null);
+}
+function makeUndoSnapshot(actor){
+ return {
+   actor,
+   board:cloneBoardForUndo(),
+   history:[...history],
+   historyHTML:historyEl.innerHTML,
+   aiLosses:{...aiLosses},
+   humanKnownLosses:{...humanKnownLosses},
+   lastEngineStats:{...lastEngineStats},
+   flankActivity:{...flankActivity},
+   humanActivity:JSON.parse(JSON.stringify(humanActivity)),
+   switcherPhase,resignBadCount,
+   aiSeenHuman:[...aiSeenHuman],
+   humanMoved:[...humanMoved],
+   humanRetreatTrail:humanRetreatTrail.map(x=>({...x})),
+   aiMoveHistory:aiMoveHistory.map(x=>({...x})),
+   aiMoveCount,
+   turnCount,
+   reserveMiner,
+   lastAiMoveSquare,
+   gameOver,
+   statusText:status.textContent
+ };
+}
+function updateUndoButtons(){
+ const u=document.getElementById('undoMove');
+ const r=document.getElementById('replayAI');
+ if(u)u.style.display=(mode==='play'&&undoSnapshot&&!awaitingAiReplay)?'inline-block':'none';
+ if(r)r.style.display=(mode==='play'&&awaitingAiReplay)?'inline-block':'none';
+}
+function undoLastMove(){
+ if(!undoSnapshot||busy)return;
+ const s=undoSnapshot;
+ board=s.board.map(p=>p?{...p}:null);
+ history=[...s.history];
+ historyEl.innerHTML=s.historyHTML||'';
+ aiLosses={...s.aiLosses};
+ humanKnownLosses={...(s.humanKnownLosses||{})};
+ lastEngineStats={...(s.lastEngineStats||{timeMs:0,depth:0,nodes:0})};
+ flankActivity={...(s.flankActivity||{left:0,right:0})};
+ humanActivity=JSON.parse(JSON.stringify(s.humanActivity||{}));
+ switcherPhase=s.switcherPhase||'defensiv';
+ resignBadCount=s.resignBadCount||0;
+   resignBadCount=s.resignBadCount||0;
+ aiSeenHuman=new Set(s.aiSeenHuman||[]);
+ humanMoved=new Set(s.humanMoved||[]);
+ humanRetreatTrail=(s.humanRetreatTrail||[]).map(x=>({...x}));
+ aiMoveHistory=(s.aiMoveHistory||[]).map(x=>({...x}));
+ aiMoveCount=s.aiMoveCount||0;
+ turnCount=s.turnCount||0;
+ reserveMiner=s.reserveMiner||null;
+ lastAiMoveSquare=(s.lastAiMoveSquare===undefined?null:s.lastAiMoveSquare);
+ gameOver=!!s.gameOver;
+ selected=null;targets=[];busy=false;
+ updateLossPanel();
+
+ const undoneActor=s.actor;
+ undoSnapshot=null;
+
+ if(undoneActor===aiSide){
+   // Ställningen är nu precis innan datorns drag. Låt spelaren inspektera den.
+   awaitingAiReplay=true;
+   status.textContent='Datorns senaste drag är återtaget. Kontrollera ställningen och tryck sedan “Låt datorn spela igen”.';
+ }else{
+   awaitingAiReplay=false;
+   status.textContent='Ditt senaste drag är återtaget. Din tur.';
+ }
+ updateUndoButtons();
+ draw();
+ saveGame();
+}
+function replayComputerMove(){
+ if(!awaitingAiReplay||busy||gameOver)return;
+ awaitingAiReplay=false;
+ updateUndoButtons();
+ busy=true;
+ computerTurn();
+}
+
+function resolveMove(from,to,after){
+ let a=board[from],d=board[to];
+ undoSnapshot=makeUndoSnapshot(a?a.side:null);
+ awaitingAiReplay=false;
+ updateUndoButtons();
+ if(a && a.side===aiSide){
+   lastAiMoveSquare=to;
+   aiMoveHistory.push({from:from,to:to});
+   if(aiMoveHistory.length>12)aiMoveHistory.shift();
+   aiMoveCount++;
+ }
+ if(a && a.side===playerSide){
+   const moveDist=Math.abs(Math.floor(from/10)-Math.floor(to/10))+Math.abs((from%10)-(to%10));
+   if(moveDist>1){
+     // En lång förflyttning avslöjar legitimt att pjäsen är spejare.
+     a.knownToAI=true;
+     if(a.uid)aiSeenHuman.add(a.uid);
+   }
+   humanRetreatTrail.push({uid:a.uid||null,from:from,to:to});
+   if(humanRetreatTrail.length>14)humanRetreatTrail.shift();
+ }
+ if(a && a.side===playerSide) humanMoved.add(a.uid);
+ turnCount++;
+ if(a && a.side===playerSide)noteHumanActivity(a,from,to);
+ noteFlankActivity(from,to);
+ saveGame();
+ if(!d){board[to]=a;board[from]=null;after();return}
+ let res=battleResult(a,d);
+ if(a.side===playerSide){a.knownToAI=true;if(a.uid)aiSeenHuman.add(a.uid);}
+ if(d.side===playerSide){d.knownToAI=true;if(d.uid)aiSeenHuman.add(d.uid);}
+ showBattle(a,d,res,()=>{
+   addHistory(a,d,res);
+   if(d.id==='F'&&res===1){
+    if(d.side===playerSide)recordHumanKnownLoss(d);
+    board[to]=a;board[from]=null;gameOver=true;status.textContent=a.side===playerSide?'Du tog flaggan. Du vann!':'Datorn tog flaggan. Du förlorade.';draw();return;
+   }
+   if(res>0){
+     if(d.side===aiSide)recordAiLoss(d);
+     if(d.side===playerSide)recordHumanKnownLoss(d);
+     if(memoryMode==='open')a.revealed=true;
+     board[to]=a;board[from]=null;
+   } else if(res<0){
+     if(a.side===aiSide)recordAiLoss(a);
+     if(a.side===playerSide)recordHumanKnownLoss(a);
+     if(memoryMode==='open')d.revealed=true;
+     board[from]=null;
+   } else {
+     if(a.side===aiSide)recordAiLoss(a);
+     if(d.side===aiSide)recordAiLoss(d);
+     if(a.side===playerSide)recordHumanKnownLoss(a);
+     if(d.side===playerSide)recordHumanKnownLoss(d);
+     board[from]=null;board[to]=null;
+   }
+   saveGame();
+   after();
+ });
+}
+function playerTap(pos){
+ if(busy||gameOver||awaitingAiReplay)return;
+ let p=board[pos];
+ if(selected===null){
+  if(p&&p.side===playerSide&&movable(p.id)){selected=pos;targets=legalMoves(pos);status.textContent='Välj en markerad ruta.';draw()}
+  return;
+ }
+ if(pos===selected){selected=null;targets=[];status.textContent='Markeringen togs bort.';draw();return}
+ if(targets.includes(pos)){
+  busy=true;let from=selected;selected=null;targets=[];
+  resolveMove(from,pos,()=>{draw();if(!gameOver)computerTurn()});
+ }else if(p&&p.side===playerSide&&movable(p.id)){selected=pos;targets=legalMoves(pos);draw()}
+ else{selected=null;targets=[];draw()}
+}
+function knownEnemyValue(piece){
+ if(!piece||piece.side!==playerSide)return 0;
+ if(piece.knownToAI)return strength(piece.id);
+ return 5.5;
+}
+function aiKnows(piece){
+ return !!(piece&&piece.side===playerSide&&piece.knownToAI);
+}
+function distanceToEnemyFlagGuess(pos){
+ let r=Math.floor(pos/10),c=pos%10;
+ const targetRow=playerSide==='red'?9:0;
+ return Math.abs(r-targetRow)+Math.min(Math.abs(c-2),Math.abs(c-7));
+}
+function copyBoard(){
+ return board.map(p=>p?{...p}:null);
+}
+function materialEstimate(side){
+ let total=0;
+ for(const p of board){
+   if(!p||p.side!==side)continue;
+   if(p.id==='F')total+=120;
+   else if(p.id==='B')total+=18;
+   else total+=strength(p.id)*8;
+ }
+ return total;
+}
+function adjacentEnemies(pos,side){
+ let r=Math.floor(pos/10),c=pos%10,n=0;
+ for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+   let nr=r+dr,nc=c+dc;
+   if(nr>=0&&nr<10&&nc>=0&&nc<10){
+     let p=board[nr*10+nc];
+     if(p&&p.side!==side)n++;
+   }
+ }
+ return n;
+}
+function likelyBombRisk(target){
+ // The AI never reads an unknown identity. Risk is inferred only from immobility and location.
+ let p=board[target];
+ if(!p||p.side!==playerSide||p.knownToAI)return 0;
+ let r=Math.floor(target/10);
+ const backZone=playerSide==='red'?r>=7:r<=2;
+ return backZone?18:7;
+}
+function evaluateAfterKnownBattle(attacker,defender){
+ if(!defender)return 4;
+ if(!aiKnows(defender))return 0;
+ const res=battleResult(attacker,defender);
+ if(res>0)return 65+strength(defender.id)*7;
+ if(res===0)return 8-strength(attacker.id)*2;
+ return -85-strength(attacker.id)*5;
+}
+function scorePositionForAI(){
+ let score=0;
+ // Endast information som AI:n får känna till: eget material exakt,
+ // motståndarens dolda pjäser får ett neutralt schablonvärde.
+ for(const p of board){
+   if(!p)continue;
+   if(p.side===aiSide){
+     if(p.id==='F')score+=120;
+     else if(p.id==='B')score+=18;
+     else score+=strength(p.id)*8;
+   }else{
+     if(p.knownToAI){
+       if(p.id==='F')score-=120;
+       else if(p.id==='B')score-=18;
+       else score-=strength(p.id)*8;
+     }else score-=38;
+   }
+ }
+ for(let i=0;i<100;i++){
+   let p=board[i];if(!p)continue;
+   let r=Math.floor(i/10);
+   if(p.side===aiSide){
+     let advance=aiSide==='blue'?r:(9-r);
+     score+=advance*1.8;
+     if(p.id==='3')score+=3;
+     if(p.id==='S'&&!p.revealed)score+=4;
+   }
+ }
+ return score;
+}
+function simulateKnownMove(move,side){
+ let [from,to]=move,a=board[from],d=board[to];
+ if(!a)return;
+ if(!d){board[to]=a;board[from]=null;return}
+ // Only resolve a battle in simulation when the AI knows the human identity.
+ // Unknown pieces are treated as uncertain blockers, never inspected.
+ if(d.side===playerSide&&!d.knownToAI){
+   board[to]=a;board[from]=null;
+   return;
+ }
+ let res=battleResult(a,d);
+ if(res>0){board[to]=a;board[from]=null}
+ else if(res<0){board[from]=null}
+ else{board[from]=null;board[to]=null}
+}
+function bestKnownReplyPenalty(){
+ let replies=allMoves(playerSide),worst=0;
+ for(const [f,t] of replies){
+   let a=board[f],d=board[t];
+   if(!d||d.side!==aiSide)continue;
+   let penalty=10;
+   if(a.knownToAI){
+     let res=battleResult(a,d);
+     if(res>0)penalty=55+strength(d.id)*6;
+     else if(res===0)penalty=12;
+     else penalty=-8;
+   }else{
+     penalty=16+strength(d.id)*2;
+   }
+   if(penalty>worst)worst=penalty;
+ }
+ return worst;
+}
+
+function countMovable(side){
+ let n=0;
+ for(const p of board)if(p&&p.side===side&&movable(p.id))n++;
+ return n;
+}
+function countKnownUnmovedHumanBackPieces(){
+ let n=0;
+ for(let i=0;i<100;i++){
+   const p=board[i]; if(!p||p.side!==playerSide)continue;
+   const r=Math.floor(i/10);
+   const back=playerSide==='red'?r>=7:r<=2;
+   if(back && !humanMoved.has(p.uid))n++;
+ }
+ return n;
+}
+function isReserveMinerMove(a,from,to){
+ if(!reserveMiner||a.uid!==reserveMiner)return false;
+ // Motståndarens dolda bomb/flagga får inte avslöjas via en exakt "movable"-räkning.
+ const humanMob=honestPotentialHumanMoves().length;
+ const aiMob=countMovable(aiSide);
+ const lateGame=humanMob<=12 || turnCount>=70 || aiMob<=8;
+ const defendingOwnFlagZone=(()=>{
+   const tr=Math.floor(to/10);
+   return aiSide==='blue'?tr<=3:tr>=6;
+ })();
+ // Reservminören får börja röra sig sent, eller om den fortfarande håller sig i den egna zonen.
+ return !lateGame && !defendingOwnFlagZone;
+}
+function unmovedBackTargetBonus(to){
+ const d=board[to];
+ if(!d||d.side!==playerSide||d.knownToAI||humanMoved.has(d.uid))return 0;
+ const r=Math.floor(to/10);
+ const back=playerSide==='red'?r>=7:r<=2;
+ if(!back)return 0;
+ // En orörd bakre pjäs kan vara bomb/flagga. Minör får en fördel, andra blir försiktigare.
+ return 1;
+}
+
+
+function humanPieceRecentlyRetreated(piecePos){
+ const p=board[piecePos];
+ if(!p||p.side!==playerSide)return false;
+ const uid=p.uid||null;
+ const recent=humanRetreatTrail.filter(x=>x.uid===uid).slice(-3);
+ if(!recent.length)return false;
+ let retreats=0;
+ for(const m of recent){
+   const fr=Math.floor(m.from/10), tr=Math.floor(m.to/10);
+   if(playerSide==='red' ? tr>fr : tr<fr)retreats++;
+ }
+ return retreats>=1;
+}
+function unknownHumanNeighbors(pos){
+ let r=Math.floor(pos/10),c=pos%10,n=0;
+ for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+   const nr=r+dr,nc=c+dc;
+   if(nr<0||nr>9||nc<0||nc>9)continue;
+   const p=board[nr*10+nc];
+   if(p&&p.side===playerSide&&!p.knownToAI)n++;
+ }
+ return n;
+}
+
+
+function countPieces(side){
+ let n=0;
+ for(const p of board)if(p&&p.side===side)n++;
+ return n;
+}
+function seenHumanCount(){
+ return aiSeenHuman.size;
+}
+function defensiveOpening(){
+ // Ungefär 20 av datorns egna drag, eller tills den fått konkret information
+ // om minst sex mänskliga pjäser.
+ return aiMoveCount<20 && seenHumanCount()<6;
+}
+function clearlyAhead(){
+ // Medvetet försiktigt mått: inga dolda grader läses.
+ const lead=countPieces(aiSide)-countPieces(playerSide);
+ return lead>=3 && seenHumanCount()>=4;
+}
+function aiAdvanceDepth(pos){
+ const r=Math.floor(pos/10);
+ return aiSide==='blue'?r:(9-r);
+}
+function supportBehind(pos){
+ // Finns egen pjäs precis bakom destinationsrutan?
+ const r=Math.floor(pos/10),c=pos%10;
+ const br=aiSide==='blue'?r-1:r+1;
+ if(br<0||br>9)return 0;
+ const p=board[br*10+c];
+ return p&&p.side===aiSide?1:0;
+}
+function moveDistance(move){
+ const [f,t]=move;
+ return Math.abs(Math.floor(f/10)-Math.floor(t/10))+Math.abs((f%10)-(t%10));
+}
+function repetitionPenalty(move){
+ const [f,t]=move;
+ let pen=0;
+ const h=aiMoveHistory;
+ if(h.length){
+   const last=h[h.length-1];
+   if(last.from===t&&last.to===f)pen+=34;
+ }
+ if(h.length>=3){
+   const a=h[h.length-1],b=h[h.length-2],c=h[h.length-3];
+   if(a.from===t&&a.to===f && c.from===t&&c.to===f)pen+=55;
+   if(a.from===c.from&&a.to===c.to)pen+=15;
+ }
+ return pen;
+}
+function honestPotentialHumanMoves(){
+ // AI:n får inte använda motståndarens dolda identitet för att generera svar.
+ // Okända pjäser behandlas som om de kan gå ETT steg. Lång spejarrörelse
+ // används bara när spejaren redan är känd.
+ const out=[];
+ for(let i=0;i<100;i++){
+   const p=board[i];
+   if(!p||p.side!==playerSide)continue;
+   if(p.knownToAI && !movable(p.id))continue;
+   const r=Math.floor(i/10),c=i%10;
+   const max=(p.knownToAI&&p.id==='2')?9:1;
+   for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+     for(let s=1;s<=max;s++){
+       const nr=r+dr*s,nc=c+dc*s;
+       if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;
+       const j=nr*10+nc,t=board[j];
+       if(!t){out.push([i,j]);continue}
+       if(t.side!==playerSide)out.push([i,j]);
+       break;
+     }
+   }
+ }
+ return out;
+}
+function honestHumanThreatPenalty(){
+ // Värsta DIREKTA hotet efter en simulerad AI-förflyttning.
+ // För okända mänskliga angripare läser vi aldrig deras verkliga grad.
+ let worst=0;
+ for(const [f,t] of honestPotentialHumanMoves()){
+   const a=board[f],d=board[t];
+   if(!d||d.side!==aiSide)continue;
+   let penalty;
+   if(a.knownToAI){
+     const res=battleResult(a,d);
+     if(res>0)penalty=48+strength(d.id)*6;
+     else if(res===0)penalty=10;
+     else penalty=-5;
+   }else{
+     // Okänd angripare: anta osäker risk, större för värdefulla försvarare.
+     penalty=12+Math.min(10,strength(d.id))*3.2;
+   }
+   if(penalty>worst)worst=penalty;
+ }
+ return worst;
+}
+
+
+
+
+function noteHumanActivity(piece,from,to){
+ if(!piece||piece.side!==playerSide||!piece.uid)return;
+ const old=humanActivity[piece.uid]||{moves:0,lastTurn:0,lastFrom:null,lastTo:null};
+ humanActivity[piece.uid]={
+   moves:(old.moves||0)+1,
+   lastTurn:turnCount,
+   lastFrom:from,
+   lastTo:to
+ };
+}
+function aiHomeIntrusionDepth(pos){
+ const r=Math.floor(pos/10);
+ // 0 = ännu inte inne på datorns halva. Större värde = djupare intrång.
+ if(aiSide==='blue'){
+   if(r>=5)return 0;
+   return 5-r;
+ }else{
+   if(r<=4)return 0;
+   return r-4;
+ }
+}
+function humanActivityInfo(piece,pos){
+ if(!piece||piece.side!==playerSide||piece.knownToAI)return null;
+ const h=humanActivity[piece.uid]||{moves:0,lastTurn:-999};
+ const age=turnCount-(h.lastTurn||0);
+ const depth=aiHomeIntrusionDepth(pos);
+ return {moves:h.moves||0,age,depth};
+}
+function scoutProbeBonus(move){
+ const [from,to]=move,a=board[from],d=board[to];
+ if(!a||a.side!==aiSide||a.id!=='2')return 0;
+ if(!d||d.side!==playerSide||d.knownToAI)return 0;
+
+ // Inte direkt i öppningen. Informationsuppoffringar blir relevanta
+ // först när människans pjäser faktiskt har börjat visa beteende.
+ if(aiMoveCount<10 || turnCount<20)return 0;
+
+ const info=humanActivityInfo(d,to);
+ if(!info)return 0;
+
+ // Kräver att målet verkligen är aktivt och fortfarande aktuellt.
+ if(info.moves<2 || info.age>10)return 0;
+
+ let bonus=18;
+ bonus+=Math.min(34,(info.moves-1)*9);
+ bonus+=Math.min(52,info.depth*16);
+ bonus+=Math.max(0,18-info.age*2);
+
+ // En pjäs som trängt långt in är särskilt värdefull att identifiera:
+ // "Vad är det egentligen som kommer här?"
+ if(info.depth>=2)bonus+=24;
+ if(info.depth>=3)bonus+=18;
+
+ return bonus;
+}
+function scoutProbeDescription(move){
+ const [f,t]=move,a=board[f],d=board[t];
+ if(!a||a.id!=='2'||!d)return null;
+ const b=scoutProbeBonus(move);
+ if(b<=0)return null;
+ const inf=humanActivityInfo(d,t);
+ return inf?{bonus:b,moves:inf.moves,depth:inf.depth,age:inf.age}:null;
+}
+
+function flankOfPos(pos){
+ const c=pos%10;
+ return c<=4?'left':'right';
+}
+function noteFlankActivity(from,to){
+ const f1=flankOfPos(from),f2=flankOfPos(to);
+ flankActivity[f1]=turnCount;
+ flankActivity[f2]=turnCount;
+}
+function quietFlankInfo(){
+ if(turnCount<42)return null;
+ const leftQuiet=turnCount-(flankActivity.left||0);
+ const rightQuiet=turnCount-(flankActivity.right||0);
+ const best=leftQuiet>=rightQuiet
+   ?{flank:'left',quiet:leftQuiet}
+   :{flank:'right',quiet:rightQuiet};
+
+ // Kräver verklig stiltje: ungefär 7 hela dragpar eller mer.
+ if(best.quiet<14)return null;
+ return best;
+}
+function moveOnFlank(move,flank){
+ const [f,t]=move;
+ return flankOfPos(f)===flank || flankOfPos(t)===flank;
+}
+function flankOffensivePiece(id){
+ // Mellanpjäser och spejare får gärna skapa spel. Spion, reservminör
+ // och högsta befälen ska inte plötsligt kastas fram bara för detta.
+ return ['2','4','5','6','7','8'].includes(String(id));
+}
+function quietFlankRootBonus(move){
+ const q=quietFlankInfo();
+ if(!q)return 0;
+ const [f,t]=move,a=board[f],d=board[t];
+ if(!a||a.side!==aiSide||!moveOnFlank(move,q.flank)||!flankOffensivePiece(a.id))return 0;
+
+ const fr=Math.floor(f/10),tr=Math.floor(t/10);
+ const advance=aiSide==='blue'?(tr-fr):(fr-tr);
+ let bonus=0;
+
+ // Ju längre flanken varit orörd, desto mer benägen blir motorn
+ // att skapa ett nytt problem där.
+ bonus+=Math.min(22,(q.quiet-12)*1.15);
+ if(advance>0)bonus+=8*advance;
+ if(onOpponentSide(t)&&!onOpponentSide(f))bonus+=10;
+
+ // Okänd strid är fortfarande riskfylld; flankinitiativ betyder inte självmord.
+ if(d&&!d.knownToAI)bonus-=10;
+ return bonus;
+}
+
+function onOpponentSide(pos){
+ const r=Math.floor(pos/10);
+ // Datorn får gärna hålla passagerna/egen halva, men ska inte frivilligt
+ // marschera djupt in på människans sida utan ett tydligt övertag.
+ return aiSide==='blue' ? r>=6 : r<=3;
+}
+function onOwnDefensiveFront(pos){
+ const r=Math.floor(pos/10);
+ // Raden precis framför sjöarna / vid passagerna.
+ return aiSide==='blue' ? r===3 : r===6;
+}
+function knownWinningAttack(a,d){
+ if(!a||!d||d.side!==playerSide||!d.knownToAI)return false;
+ return battleResult(a,d)>0;
+}
+function veryClearlyAhead(){
+ // Avsiktligt konservativt: ett litet materialövertag räcker inte
+ // för att övergå till offensiv.
+ const pieceLead=countPieces(aiSide)-countPieces(playerSide);
+ return pieceLead>=5 && seenHumanCount()>=7;
+}
+function highOfficerExposurePenalty(to,a){
+ if(!a||!['7','8','9','10'].includes(a.id))return 0;
+ // Okända mänskliga grannar = stor risk för hög pjäs.
+ let r=Math.floor(to/10),c=to%10,unknown=0,knownThreat=0;
+ for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+   const nr=r+dr,nc=c+dc;
+   if(nr<0||nr>9||nc<0||nc>9)continue;
+   const p=board[nr*10+nc];
+   if(!p||p.side!==playerSide)continue;
+   if(!p.knownToAI)unknown++;
+   else if(battleResult(p,a)>0)knownThreat++;
+ }
+ return unknown*24 + knownThreat*55;
+}
+
+
+const SWITCH_MATERIAL_VALUE={
+ B:38,S:45,'2':22,'3':58,'4':34,'5':46,'6':62,'7':82,'8':112,'9':155,'10':225
+};
+
+function aiOwnRemainingCounts(){
+ const c={F:0,B:0,S:0,'2':0,'3':0,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0};
+ for(const p of board){
+   if(p&&p.side===aiSide)c[p.id]=(c[p.id]||0)+1;
+ }
+ return c;
+}
+function aiOpponentRemainingCounts(){
+ // Datorn vet vilka grader som slagits ut eftersom striderna avslöjar dem.
+ // Den vet fortfarande inte var de återstående dolda graderna står.
+ const c={F:1,B:6,S:1,'2':8,'3':5,'4':4,'5':4,'6':4,'7':3,'8':2,'9':1,'10':1};
+ for(const [id,n] of Object.entries(humanKnownLosses||{})){
+   c[id]=Math.max(0,(c[id]||0)-n);
+ }
+ return c;
+}
+function switchMaterialPoints(c){
+ let s=0;
+ for(const [id,v] of Object.entries(SWITCH_MATERIAL_VALUE))s+=(c[id]||0)*v;
+ return s;
+}
+function switchHighestOfficer(c){
+ for(const id of ['10','9','8','7','6','5','4','3','2']){
+   if((c[id]||0)>0)return Number(id);
+ }
+ return 0;
+}
+function switcherStrengthState(){
+ const own=aiOwnRemainingCounts(),opp=aiOpponentRemainingCounts();
+ const ownPts=switchMaterialPoints(own),oppPts=switchMaterialPoints(opp);
+ const pointLead=ownPts-oppPts;
+ const ownHigh=switchHighestOfficer(own),oppHigh=switchHighestOfficer(opp);
+ const ownSpy=(own.S||0)>0,oppSpy=(opp.S||0)>0;
+ const ownMiners=own['3']||0,oppMiners=opp['3']||0;
+
+ let highControl=ownHigh>oppHigh?1:ownHigh<oppHigh?-1:0;
+ if(ownHigh===10&&oppSpy)highControl-=0.35;
+ if(oppHigh===10&&ownSpy)highControl+=0.35;
+
+ let special=0;
+ if(ownSpy&&!oppSpy)special+=18;
+ if(!ownSpy&&oppSpy)special-=18;
+ special+=(ownMiners-oppMiners)*8;
+
+ return {
+   own,opp,ownPts,oppPts,pointLead,
+   effectiveLead:pointLead+special,
+   ownHigh,oppHigh,highControl,
+   ownSpy,oppSpy,ownMiners,oppMiners
+ };
+}
+function updateSwitcherPhase(){
+ const s=switcherStrengthState();
+
+ // Växlaren får nu också BACKA i fas om styrkeförhållandet förändras tydligt.
+ // Det finns ändå hysteresis: små svängningar ger inte humörbyte varje drag.
+
+ // Klart underläge -> defensiv, oavsett tidigare fas.
+ const clearlyBehind =
+   s.effectiveLead<=-115 ||
+   (s.effectiveLead<=-65 && s.highControl<0);
+
+ if(clearlyBehind){
+   switcherPhase='defensiv';
+   return {phase:switcherPhase,resignBadCount,...s};
+ }
+
+ // Om offensiven tappat sin grund, gå tillbaka till sondering.
+ if(switcherPhase==='offensiv'){
+   const lostAttackBasis =
+     s.effectiveLead<-35 ||
+     (s.highControl<-0.35 && s.effectiveLead<55);
+
+   if(lostAttackBasis)switcherPhase='sonderande';
+ }
+
+ // Från defensiv till sondering:
+ // ungefär jämnt material och ingen tydlig toppnackdel,
+ // eller ett tydligt materialövertag.
+ if(switcherPhase==='defensiv'){
+   const enoughInformation =
+     Object.values(humanKnownLosses||{}).reduce((a,b)=>a+b,0)>=2 ||
+     seenHumanCount()>=4;
+
+   const balancedEnough =
+     s.effectiveLead>=-35 && s.highControl>=-0.35;
+
+   const materialGood =
+     s.effectiveLead>=110 && s.highControl>=-0.65;
+
+   if(enoughInformation && (balancedEnough||materialGood)){
+     switcherPhase='sonderande';
+   }
+ }
+
+ // FULL OFFENSIV:
+ // Nu krävs mycket tydligare skäl än tidigare.
+ // A) materialövertag + minst lika hög toppofficer
+ // B) högsta officeren är vår + materialet är minst jämnt
+ // C) mycket stort materialövertag kan kompensera en mindre toppnackdel
+ if(switcherPhase==='sonderande'){
+   const materialAndTop =
+     s.effectiveLead>=70 && s.highControl>=0;
+
+   const topAndEven =
+     s.highControl>0.45 && s.effectiveLead>=0;
+
+   const crushingMaterial =
+     s.effectiveLead>=210 && s.highControl>=-0.35;
+
+   if(materialAndTop || topAndEven || crushingMaterial){
+     switcherPhase='offensiv';
+   }
+ }
+
+ return {phase:switcherPhase,resignBadCount,...s};
+}
+
+function switcherCombatPoints(c){
+ // För uppgivenhet räknas framför allt sådant som faktiskt kan slåss/röra sig.
+ // Flagga och bomber räknas inte som "arméstyrka" här.
+ let s=0;
+ for(const id of ['S','2','3','4','5','6','7','8','9','10']){
+   s+=(c[id]||0)*(SWITCH_MATERIAL_VALUE[id]||0);
+ }
+ return s;
+}
+function switcherMovableCountFromCounts(c){
+ let n=0;
+ for(const id of ['S','2','3','4','5','6','7','8','9','10'])n+=(c[id]||0);
+ return n;
+}
+function resignationAssessment(){
+ const s=switcherStrengthState();
+ const ownCombat=switcherCombatPoints(s.own);
+ const oppCombat=switcherCombatPoints(s.opp);
+ const combatLead=ownCombat-oppCombat;
+ const ownMov=switcherMovableCountFromCounts(s.own);
+ const oppMov=switcherMovableCountFromCounts(s.opp);
+
+ // Ingen kapitulation innan partiet faktiskt har producerat tillräckligt
+ // med offentlig information/strider.
+ const humanLosses=Object.values(humanKnownLosses||{}).reduce((a,b)=>a+b,0);
+ const ownStart={S:1,'2':8,'3':5,'4':4,'5':4,'6':4,'7':3,'8':2,'9':1,'10':1};
+ let ownLosses=0;
+ for(const [id,n] of Object.entries(ownStart)){
+   ownLosses += Math.max(0,n-(s.own[id]||0));
+ }
+ const totalKnownLosses=humanLosses+ownLosses;
+ if(totalKnownLosses<8){
+   resignBadCount=0;
+   return {resign:false,immediate:false,combatLead,ownCombat,oppCombat,ownMov,oppMov,s};
+ }
+
+ // Mycket kraftigt underläge: den får ge upp direkt om den inte samtidigt
+ // sitter med en verklig toppfördel som kan rädda partiet.
+ const catastrophic =
+   combatLead<=-360 &&
+   s.highControl<=0.35;
+
+ // Också i praktiken hopplöst om armén är mycket mindre och toppofficeren
+ // inte är bättre.
+ const tinyArmy =
+   ownMov<=5 &&
+   oppMov>=9 &&
+   s.highControl<=0 &&
+   combatLead<=-180;
+
+ if(catastrophic || tinyArmy){
+   resignBadCount=2;
+   return {resign:true,immediate:true,combatLead,ownCombat,oppCombat,ownMov,oppMov,s};
+ }
+
+ // Normal uppgivenhetszon. Kräver två egna turer i följd.
+ const clearlyBad =
+   (combatLead<=-220 && s.highControl<=0) ||
+   (combatLead<=-150 && s.highControl<=-0.65);
+
+ if(clearlyBad)resignBadCount++;
+ else if(combatLead>-110 || s.highControl>0.35)resignBadCount=0;
+ else resignBadCount=Math.max(0,resignBadCount-1);
+
+ return {
+   resign:resignBadCount>=2,
+   immediate:false,
+   combatLead,ownCombat,oppCombat,ownMov,oppMov,s
+ };
+}
+function computerResigns(assessment){
+ gameOver=true;
+ busy=false;
+ selected=null;targets=[];
+ const ss=assessment.s;
+ status.textContent='Datorn ger upp. Du vann. '+
+   'Stridsvärde '+Math.round(assessment.ownCombat)+'–'+Math.round(assessment.oppCombat)+
+   ', högsta officer '+ss.ownHigh+'–'+ss.oppHigh+'.';
+ const drawBtn=document.getElementById('drawOffer');
+ if(drawBtn)drawBtn.style.display='none';
+ updateUndoButtons();
+ saveGame();
+ draw();
+}
+
+function switcherProfile(){
+ const sw=updateSwitcherPhase();
+ if(sw.phase==='defensiv'){
+   return {
+     phase:'defensiv',aggression:.74,safety:1.44,info:.92,
+     flank:.78,risk:1.52,initiative:.68,minerReserve:1.85,backRaid:0,
+     strength:sw
+   };
+ }
+ if(sw.phase==='sonderande'){
+   return {
+     phase:'sonderande',aggression:1.02,safety:1.08,info:1.30,
+     flank:1.12,risk:.92,initiative:1.12,minerReserve:1.15,backRaid:.55,
+     strength:sw
+   };
+ }
+ return {
+   phase:'offensiv',aggression:1.48,safety:.72,info:1.22,
+   flank:1.38,risk:.50,initiative:1.68,minerReserve:.38,backRaid:1.70,
+   strength:sw
+ };
+}
+function opponentBackRow(){
+ return playerSide==='red'?9:0;
+}
+function stationaryUnknownBackTargets(){
+ const row=opponentBackRow(),out=[];
+ for(let c=0;c<10;c++){
+   const pos=row*10+c,p=board[pos];
+   if(!p||p.side!==playerSide)continue;
+   if(p.knownToAI)continue;
+   if(humanMoved.has(p.uid))continue;
+   out.push(pos);
+ }
+ return out;
+}
+function switchManhattan(a,b){
+ return Math.abs(Math.floor(a/10)-Math.floor(b/10))+Math.abs((a%10)-(b%10));
+}
+function switcherBackRaidBonus(move){
+ const profile=switcherProfile();
+ if(profile.backRaid<=0)return 0;
+ const [from,to]=move,a=board[from],d=board[to];
+ if(!a||a.side!==aiSide)return 0;
+ if(!['2','3','4','5','6','7','8','9'].includes(a.id))return 0;
+
+ const targets=stationaryUnknownBackTargets();
+ if(!targets.length)return 0;
+ const before=Math.min(...targets.map(x=>switchManhattan(from,x)));
+ const after=Math.min(...targets.map(x=>switchManhattan(to,x)));
+ let bonus=(before-after)*10*profile.backRaid;
+
+ if(d&&d.side===playerSide&&!d.knownToAI&&!humanMoved.has(d.uid)&&
+    Math.floor(to/10)===opponentBackRow()){
+   bonus+=(profile.phase==='offensiv'?48:18)*profile.backRaid;
+ }
+ if(after<=3)bonus+=8*profile.backRaid;
+ return bonus;
+}
+function switcherMinerPenalty(move){
+ const profile=switcherProfile();
+ const [from,to]=move,a=board[from],d=board[to];
+ if(!a||a.side!==aiSide||a.id!=='3')return 0;
+ if(d&&d.side===playerSide&&d.knownToAI&&d.id==='B')return 0;
+
+ const miners=board.filter(p=>p&&p.side===aiSide&&p.id==='3').length;
+ if(miners<=1)return 72;
+ if(miners===2)return 28*profile.minerReserve;
+ return 13*profile.minerReserve;
+}
+
+function aiScore(move){
+ let [from,to]=move,a=board[from],d=board[to];
+ let fr=Math.floor(from/10),tr=Math.floor(to/10);
+ let score=Math.random()*0.8;
+ const swp=switcherProfile();
+ const advance=aiSide==='blue'?(tr-fr):(fr-tr);
+ const dist=moveDistance(move);
+ const opening=defensiveOpening();
+ const ahead=veryClearlyAhead();
+ const crossesIntoEnemy=onOpponentSide(to) && !onOpponentSide(from);
+ const staysEnemy=onOpponentSide(to);
+
+ // Lång stiltje på en flank kan motivera ett plötsligt initiativ.
+ score+=quietFlankRootBonus(move)*swp.flank;
+ score+=scoutProbeBonus(move)*swp.info;
+ score+=switcherBackRaidBonus(move);
+ score-=switcherMinerPenalty(move);
+
+ // NY huvudprincip: håll egen halva tills datorn tydligt leder.
+ // Att gå in på motståndarens sida utan tydligt övertag är nästan alltid fel.
+ if(!ahead && crossesIntoEnemy)score-=22*swp.safety/Math.max(.65,swp.initiative);
+ if(!ahead && staysEnemy)score-=9*swp.safety/Math.max(.65,swp.initiative);
+
+ // Även med övertag: offensiv ska vara försiktig, inte ett rus.
+ if(ahead && crossesIntoEnemy)score-=3*swp.safety;
+
+ // Håll gärna en stark defensiv front vid passagerna.
+ if(onOwnDefensiveFront(to) && ['6','7','8'].includes(a.id))score+=18;
+ if(onOwnDefensiveFront(to) && supportBehind(to))score+=10;
+
+ // Höga officerare ska inte ställas intill okända fiender i onödan.
+ score-=highOfficerExposurePenalty(to,a);
+
+ // Pendling ska vara en sista utväg, inte standardbeteende.
+ score-=repetitionPenalty(move);
+
+ // Reservminören sparas som tidigare.
+ if(isReserveMinerMove(a,from,to))score-=160;
+
+ // Grundstil: låg aggressivitet. Framåtrörelse är positiv först när den
+ // förbättrar en försvarsposition eller datorn verkligen leder.
+ score+=advance*(opening?0.35:(ahead?2.5:0.55))*swp.aggression*swp.initiative;
+ score-=distanceToEnemyFlagGuess(to)*(opening?0.08:(ahead?0.35:0.15));
+
+ // Uppmuntra en sammanhängande front, särskilt kaptener/majorer/överstar.
+ const depth=aiAdvanceDepth(to);
+ if(['6','7','8'].includes(a.id)){
+   if(depth>=3&&!onOpponentSide(to))score+=opening?16:8;
+   if(supportBehind(to))score+=opening?13:8;
+ }
+ if(['9','10'].includes(a.id)&&opening&&depth>=3)score-=10; // för dyrt att visa högsta befälen tidigt
+
+ // Bevara specialpjäser.
+ if(a.id==='S')score-=opening?22:12;
+ if(a.id==='3')score-=opening?7:1;
+ if(a.uid===reserveMiner){
+   const humanPotential=honestPotentialHumanMoves().length;
+   if(humanPotential<=12 || aiMoveCount>=55)score+=18;
+   else score-=20;
+ }
+
+ // Spejare ska normalt bara krypa ett steg i öppningen.
+ if(opening && a.id==='2' && dist>1)score-=48+(dist-1)*5;
+
+ // Datorn vill helst att människan startar striderna.
+ if(d){
+   const sureWin=knownWinningAttack(a,d);
+
+   // Grundregel: låt människan anfalla. Datorn startar helst bara en strid
+   // när motståndarens grad är känd och datorn vet att den vinner.
+   if(!sureWin){
+     score-=(opening?28:(!ahead?22:10))*swp.risk/Math.max(.7,swp.initiative);
+   }else{
+     // Även säkra vinster ska inte automatiskt dra en pjäs djupt över mittlinjen.
+     score+=opening?8:(ahead?25:15);
+   }
+
+   if(aiKnows(d)){
+     const battleValue=evaluateAfterKnownBattle(a,d);
+     score+=battleValue*(sureWin ? (ahead?0.95:0.72) : 0.35);
+     if(a.id==='S'&&d.id==='10')score+=120;
+     if(a.id==='3'&&d.id==='B')score+=110;
+   }else{
+     // Okänd pjäs: rejält minus. Informationsvinsten räcker normalt inte
+     // för att motivera att kasta bort en pjäs.
+     score-=likelyBombRisk(to);
+     score-=(opening?22:(!ahead?18:9))*swp.risk;
+     if(['7','8','9','10'].includes(a.id))score-=22*swp.safety;
+     if(a.id==='S')score-=45;
+     if(a.id==='3')score-=18;
+
+     // Spejaren får medvetet offras för information mot en aktiv inkräktare.
+     if(a.id==='2'){
+       score+=scoutProbeBonus(move)*0.75*swp.info;
+     }
+   }
+ }
+
+ // Om en känd fiende backar mot okända stöd, misstänk bete.
+ if(d && d.side===playerSide && d.knownToAI && strength(a.id)>=8){
+   const retreating=humanPieceRecentlyRetreated(to);
+   const unknownSupport=unknownHumanNeighbors(to);
+   if(retreating&&unknownSupport>0)score-=42+unknownSupport*18;
+ }
+
+ // Enkelt är ofta bra i öppningen: ett steg, gardering, inga onödiga dueller.
+ if(opening){
+   if(dist===1&&!d)score+=12;
+   if(advance===0&&!d)score+=8;      // sidledes omgruppering är bra
+   if(advance<0&&!d)score+=5;        // reträtt är helt acceptabel
+   if(!onOpponentSide(to)&&!d)score+=10;
+ }
+ if(!opening&&!ahead&&!d){
+   if(!onOpponentSide(to))score+=8;
+   if(advance===0)score+=5;
+   if(advance<0)score+=3;
+ }
+
+ // Även senare: värdera säkerheten efter draget med en ärlig hotmodell.
+ const saved=copyBoard();
+ // För okänd mänsklig försvarare gör simuleringen inget verkligt stridsantagande:
+ // behandla attacken försiktigt genom scoring ovan. För rena drag kan vi simulera säkert.
+ if(!d || (d&&d.side===playerSide&&d.knownToAI)){
+   simulateKnownMove(move,aiSide);
+   const threat=honestHumanThreatPenalty();
+   const positional=scorePositionForAI()*0.028;
+   board=saved;
+   score+=positional-threat*(opening?1.15:(ahead?0.72:0.95));
+ }else{
+   board=saved;
+ }
+
+ return score;
+}
+
+function isStrictlyLegalMove(move,side){
+ const [from,to]=move;
+ const p=board[from];
+ if(!p||p.side!==side||!movable(p.id))return false;
+
+ const fr=Math.floor(from/10),fc=from%10;
+ const tr=Math.floor(to/10),tc=to%10;
+ if(isLake(tr,tc))return false;
+ if(fr!==tr&&fc!==tc)return false;
+
+ const distance=Math.abs(fr-tr)+Math.abs(fc-tc);
+ if(String(p.id)!=='2'&&distance!==1)return false;
+ if(String(p.id)==='2'&&distance<1)return false;
+
+ const dr=Math.sign(tr-fr),dc=Math.sign(tc-fc);
+ let r=fr+dr,c=fc+dc;
+ while(r!==tr||c!==tc){
+   if(isLake(r,c)||board[r*10+c])return false;
+   r+=dr;c+=dc;
+ }
+
+ const target=board[to];
+ if(target&&target.side===side)return false;
+ return true;
+}
+function strictMoves(side){
+ return allMoves(side).filter(m=>isStrictlyLegalMove(m,side));
+}
+
+
+// ====================== MOTOR 2.0 ======================
+// Search state never contains the real identity of an unknown human piece.
+// Unknown human pieces are represented by id:'?' and evaluated from the
+// information the computer has legitimately observed.
+
+const ENGINE_VALUE={
+ F:5000,B:38,S:45,'2':22,'3':58,'4':34,'5':46,'6':62,'7':82,'8':112,'9':155,'10':225
+};
+
+function enginePieceValue(id){
+ return ENGINE_VALUE[String(id)]||42;
+}
+function engineInitialCounts(){
+ const x={};
+ for(const d of defs)x[String(d.id)]=d.n;
+ return x;
+}
+function engineKnowledgeBoard(){
+ return board.map(p=>{
+   if(!p)return null;
+   if(p.side===aiSide){
+     return {side:'A',id:String(p.id),known:true,moved:true,uid:p.uid||''};
+   }
+   const known=!!p.knownToAI;
+   return {
+     side:'H',
+     id:known?String(p.id):'?',
+     known,
+     moved:humanMoved.has(p.uid),
+     uid:p.uid||''
+   };
+ });
+}
+function engineCandidateCounts(state, movingUnknown=false){
+ const counts=engineInitialCounts();
+
+ // Known human casualties are public to the AI because every combat reveals ranks.
+ for(const [id,n] of Object.entries(humanKnownLosses)){
+   counts[id]=Math.max(0,(counts[id]||0)-n);
+ }
+
+ // Remove all known human pieces still on the board.
+ for(const p of state){
+   if(p&&p.side==='H'&&p.known&&p.id!=='?'){
+     counts[p.id]=Math.max(0,(counts[p.id]||0)-1);
+   }
+ }
+ if(movingUnknown){
+   counts.F=0;
+   counts.B=0;
+ }
+ return counts;
+}
+function engineCandidatesFor(piece,state,asMover=false){
+ if(!piece||piece.side!=='H'||piece.known||piece.id!=='?'){
+   return piece&&piece.id!=='?'?[[String(piece.id),1]]:[];
+ }
+ const counts=engineCandidateCounts(state, asMover||piece.moved);
+ const out=[];
+ for(const id of ['F','B','S','2','3','4','5','6','7','8','9','10']){
+   const n=counts[id]||0;
+   if(n>0)out.push([id,n]);
+ }
+ if(!out.length){
+   for(const id of ['S','2','3','4','5','6','7','8','9','10'])out.push([id,1]);
+ }
+ return out;
+}
+function engineExpectedHumanValue(piece,state){
+ if(!piece)return 0;
+ if(piece.known&&piece.id!=='?')return enginePieceValue(piece.id);
+ const cs=engineCandidatesFor(piece,state,false);
+ let s=0,w=0;
+ for(const [id,n] of cs){s+=enginePieceValue(id)*n;w+=n}
+ return w?s/w:42;
+}
+function engineBattleResultIds(attacker,defender){
+ const a=String(attacker),d=String(defender);
+ if(d==='F')return 1;
+ if(d==='B')return a==='3'?1:-1;
+ if(a==='S'&&d==='10')return 1;
+ if(a==='10'&&d==='S')return 1;
+ const sa=a==='S'?1:Number(a),sd=d==='S'?1:Number(d);
+ return sa>sd?1:sa<sd?-1:0;
+}
+function engineExpectedUnknownBattleDelta(state, attacker, defender, attackerSide){
+ // Positive = good for computer.
+ if(attackerSide==='A' && defender.side==='H' && !defender.known){
+   const cs=engineCandidatesFor(defender,state,false);
+   let total=0,w=0;
+   for(const [hid,n] of cs){
+     const res=engineBattleResultIds(attacker.id,hid);
+     let delta=0;
+     if(res>0)delta+=enginePieceValue(hid);
+     else if(res<0)delta-=enginePieceValue(attacker.id);
+     else delta+=enginePieceValue(hid)-enginePieceValue(attacker.id);
+     if(hid==='F'&&res>0)delta+=4000;
+     total+=delta*n;w+=n;
+   }
+   return w?total/w:-20;
+ }
+ if(attackerSide==='H' && !attacker.known && defender.side==='A'){
+   // Because this hidden human piece is moving, bombs/flag are excluded.
+   const cs=engineCandidatesFor(attacker,state,true);
+   let total=0,w=0;
+   for(const [hid,n] of cs){
+     const res=engineBattleResultIds(hid,defender.id);
+     let delta=0;
+     if(res>0)delta-=enginePieceValue(defender.id);
+     else if(res<0)delta+=enginePieceValue(hid);
+     else delta+=enginePieceValue(hid)-enginePieceValue(defender.id);
+     total+=delta*n;w+=n;
+   }
+   return w?total/w:-10;
+ }
+ return 0;
+}
+function engineIsLakePos(pos){
+ return isLake(Math.floor(pos/10),pos%10);
+}
+function engineGenerateMoves(state,side){
+ const out=[];
+ for(let i=0;i<100;i++){
+   const p=state[i];
+   if(!p||p.side!==side)continue;
+
+   // For a hidden human piece: if it has never moved, it might be bomb/flag,
+   // but when considering a possible human move we condition on it being movable.
+   if(p.known && (p.id==='F'||p.id==='B'))continue;
+
+   const r=Math.floor(i/10),c=i%10;
+   let max=1;
+   if(p.known&&p.id==='2')max=9;
+   // Unknown human pieces get only one-step candidate moves. A real long move
+   // would reveal the scout and become known on the next actual position.
+
+   for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+     for(let step=1;step<=max;step++){
+       const nr=r+dr*step,nc=c+dc*step;
+       if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;
+       const j=nr*10+nc,t=state[j];
+       if(!t){out.push([i,j]);continue}
+       if(t.side!==side)out.push([i,j]);
+       break;
+     }
+   }
+ }
+ return out;
+}
+function engineCloneState(state){
+ return state.map(p=>p?{...p}:null);
+}
+function engineApplyCertainMove(state,move,side){
+ const [from,to]=move;
+ const a=state[from],d=state[to];
+ if(!a)return {state,terminalDelta:0,uncertain:true};
+
+ if(!d){
+   const ns=engineCloneState(state);
+   ns[to]={...a,moved:true};
+   ns[from]=null;
+   return {state:ns,terminalDelta:0,uncertain:false};
+ }
+
+ // Any combat involving an unknown human rank is evaluated probabilistically
+ // and terminates this branch. No hidden identity is ever filled in.
+ if((a.side==='H'&&!a.known)||(d.side==='H'&&!d.known)){
+   const delta=engineExpectedUnknownBattleDelta(state,a,d,side);
+   return {state,terminalDelta:delta,uncertain:true};
+ }
+
+ const res=engineBattleResultIds(a.id,d.id);
+ const ns=engineCloneState(state);
+ if(d.id==='F'&&res>0){
+   return {state:ns,terminalDelta:side==='A'?100000:-100000,uncertain:true};
+ }
+ if(res>0){
+   ns[to]={...a,moved:true}; ns[from]=null;
+ }else if(res<0){
+   ns[from]=null;
+ }else{
+   ns[from]=null;ns[to]=null;
+ }
+ return {state:ns,terminalDelta:0,uncertain:false};
+}
+function engineStaticEval(state){
+ const swp=switcherProfile();
+ let score=0;
+ let aiCount=0,hCount=0;
+
+ for(let i=0;i<100;i++){
+   const p=state[i]; if(!p)continue;
+   const r=Math.floor(i/10),c=i%10;
+   if(p.side==='A'){
+     aiCount++;
+     score+=enginePieceValue(p.id);
+
+     // Positional activity without forcing reckless attack.
+     const adv=aiSide==='blue'?r:(9-r);
+     score+=adv*1.2*swp.aggression;
+
+     // Passages/front: captains through colonels are useful sentries.
+     const ownFront=aiSide==='blue'?r===3:r===6;
+     if(ownFront&&['6','7','8'].includes(p.id))score+=12;
+
+     // Support from immediately behind.
+     const br=aiSide==='blue'?r-1:r+1;
+     if(br>=0&&br<10){
+       const q=state[br*10+c];
+       if(q&&q.side==='A')score+=3;
+     }
+
+     // Mild, not absolute, dislike of deep incursion unless material supports it.
+     const enemySide=aiSide==='blue'?r>=6:r<=3;
+     if(enemySide)score-=5*swp.safety/Math.max(.65,swp.initiative);
+
+     // Om en flank varit länge orörd får mellanpjäser som skapar terräng
+     // där ett litet positionsvärde. Detta kan överröstas av konkret fara.
+     const qf=quietFlankInfo();
+     if(qf && flankOfPos(i)===qf.flank && flankOffensivePiece(p.id)){
+       score+=Math.min(9,(qf.quiet-12)*0.45);
+       score+=adv*0.45;
+     }
+
+     // Preserve spy/miners/high command somewhat.
+     if(p.id==='S')score+=12;
+     if(p.id==='3')score+=5;
+     if(['9','10'].includes(p.id))score+=8;
+   }else{
+     hCount++;
+     score-=p.known?enginePieceValue(p.id):engineExpectedHumanValue(p,state);
+   }
+ }
+
+ // Material-number lead matters but doesn't dictate everything.
+ score+=(aiCount-hCount)*7;
+
+ // Local danger: exposed valuable AI pieces beside unknown/known human pieces.
+ for(let i=0;i<100;i++){
+   const p=state[i];if(!p||p.side!=='A')continue;
+   const r=Math.floor(i/10),c=i%10;
+   let unknownAdj=0,knownBad=0;
+   for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+     const nr=r+dr,nc=c+dc;if(nr<0||nr>9||nc<0||nc>9)continue;
+     const q=state[nr*10+nc];
+     if(!q||q.side!=='H')continue;
+     if(!q.known)unknownAdj++;
+     else if(engineBattleResultIds(q.id,p.id)>0)knownBad++;
+   }
+   const v=enginePieceValue(p.id);
+   score-=swp.safety*unknownAdj*Math.min(18,v*0.10);
+   score-=swp.safety*knownBad*Math.min(70,v*0.35);
+ }
+ return score;
+}
+function engineMoveOrderScore(state,move,side){
+ const swp=switcherProfile();
+ const [f,t]=move,a=state[f],d=state[t];
+ let s=0;
+ if(!a)return -9999;
+ const fr=Math.floor(f/10),tr=Math.floor(t/10);
+ const advance=(side==='A')
+   ? (aiSide==='blue'?(tr-fr):(fr-tr))
+   : (playerSide==='red'?(fr-tr):(tr-fr));
+ s+=advance*2*(side==='A'?swp.aggression*swp.initiative:1);
+
+ if(d){
+   if(side==='A'){
+     if(d.side==='H'&&d.known){
+       const res=engineBattleResultIds(a.id,d.id);
+       if(res>0)s+=120+enginePieceValue(d.id)*0.5;
+       else if(res<0)s-=100;
+       else s-=20;
+     }else if(d.side==='H'){
+       s+=engineExpectedUnknownBattleDelta(state,a,d,'A')*0.35;
+     }
+   }else{
+     // Human is assumed to choose dangerous replies.
+     if(a.known&&d.side==='A'){
+       const res=engineBattleResultIds(a.id,d.id);
+       if(res>0)s+=100+enginePieceValue(d.id)*0.4;
+     }else if(!a.known&&d.side==='A'){
+       s+=Math.max(0,-engineExpectedUnknownBattleDelta(state,a,d,'H'))*0.35;
+     }
+   }
+ }
+
+ // Computer-side repetition avoidance at root/deeper model.
+ if(side==='A'){
+   const last=aiMoveHistory[aiMoveHistory.length-1];
+   if(last&&last.from===t&&last.to===f)s-=32;
+
+   // Växlarens strategiska fas påverkar vilka huvudgrenar som prioriteras.
+   s+=switcherBackRaidBonus(move)*0.85;
+   s-=switcherMinerPenalty(move)*0.55;
+
+   // Vid verklig lång stiltje prioriteras kandidater på den tysta flanken
+   // högre i sökordningen. Detta är bara offentlig draghistorik.
+   const q=quietFlankInfo();
+   if(q && moveOnFlank(move,q.flank) && flankOffensivePiece(a.id)){
+     s+=Math.min(24,(q.quiet-12)*1.2);
+     if(advance>0)s+=8*advance;
+   }
+
+   // Root-information from observed human activity. This does not inspect rank.
+   // Only real-board root moves have matching positions, so deeper fictive moves
+   // naturally receive zero or no useful activity bonus.
+   if(a.id==='2')s+=scoutProbeBonus(move)*0.85;
+ }
+ return s;
+}
+function engineOrderedMoves(state,side,limit){
+ let ms=engineGenerateMoves(state,side);
+ ms.sort((x,y)=>engineMoveOrderScore(state,y,side)-engineMoveOrderScore(state,x,side));
+ if(limit&&ms.length>limit)ms=ms.slice(0,limit);
+ return ms;
+}
+function engineSearch(state,side,depth,alpha,beta,ctx,ply){
+ if((ctx.nodes++ & 127)===0 && performance.now()>=ctx.deadline)throw ctx.timeoutToken;
+ if(depth<=0)return engineStaticEval(state);
+
+ const beam = depth>=5?5:depth===4?6:depth===3?7:8;
+ const moves=engineOrderedMoves(state,side,beam);
+ if(!moves.length){
+   return side==='A' ? -90000+ply : 90000-ply;
+ }
+
+ if(side==='A'){
+   let best=-Infinity;
+   for(const m of moves){
+     const tr=engineApplyCertainMove(state,m,'A');
+     let val;
+     if(tr.uncertain) val=engineStaticEval(state)+tr.terminalDelta;
+     else val=engineSearch(tr.state,'H',depth-1,alpha,beta,ctx,ply+1);
+     if(val>best)best=val;
+     if(best>alpha)alpha=best;
+     if(beta<=alpha)break;
+   }
+   return best;
+ }else{
+   let best=Infinity;
+   for(const m of moves){
+     const tr=engineApplyCertainMove(state,m,'H');
+     let val;
+     if(tr.uncertain) val=engineStaticEval(state)+tr.terminalDelta;
+     else val=engineSearch(tr.state,'A',depth-1,alpha,beta,ctx,ply+1);
+     if(val<best)best=val;
+     if(best<beta)beta=best;
+     if(beta<=alpha)break;
+   }
+   return best;
+ }
+}
+function enginePositionComplexity(){
+ let contacts=0,highContacts=0,known=seenHumanCount();
+ for(let i=0;i<100;i++){
+   const p=board[i];if(!p||p.side!==aiSide)continue;
+   const r=Math.floor(i/10),c=i%10;
+   for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+     const nr=r+dr,nc=c+dc;if(nr<0||nr>9||nc<0||nc>9)continue;
+     const q=board[nr*10+nc];
+     if(q&&q.side===playerSide){
+       contacts++;
+       if(['8','9','10'].includes(p.id))highContacts++;
+     }
+   }
+ }
+ const moves=strictMoves(aiSide).length;
+ return {contacts,highContacts,known,moves};
+}
+function engineThinkBudgetMs(){
+ const x=enginePositionComplexity();
+ let ms=1500;
+
+ // Normal komplexitet
+ ms+=Math.min(3200,x.contacts*560);
+ ms+=Math.min(1900,x.known*135);
+ if(x.moves>=28)ms+=900;
+
+ // Höga pjäser i kontakt eller många lokala konflikter motiverar lång sökning.
+ if(x.highContacts>=1)ms+=2200;
+ if(x.highContacts>=2||x.contacts>=5)ms+=2600;
+ if(x.contacts>=7)ms+=1700;
+
+ // Sent spel och en tyst flank ger fler strategiska kandidater att jämföra.
+ const q=quietFlankInfo();
+ if(turnCount>=55)ms+=900;
+ if(q)ms+=Math.min(1800,(q.quiet-12)*120);
+
+ const swp=switcherProfile();
+ if(swp.phase==='sonderande')ms+=500;
+ if(swp.phase==='offensiv')ms+=900;
+
+ // Om en spejare kan offras för viktig information, jämför alternativen lite noggrannare.
+ const probeMoves=strictMoves(aiSide).filter(m=>scoutProbeBonus(m)>0);
+ if(probeMoves.length)ms+=Math.min(1600,500+probeMoves.length*250);
+
+ return Math.max(1300,Math.min(15000,ms));
+}
+function engineYield(){
+ return new Promise(resolve=>setTimeout(resolve,0));
+}
+async function engineChooseMove(realMoves){
+ const start=performance.now();
+ const budget=engineThinkBudgetMs();
+ const deadline=start+budget;
+ const state=engineKnowledgeBoard();
+ const timeoutToken={engineTimeout:true};
+ const ctx={deadline,nodes:0,timeoutToken};
+
+ // First ordering uses only legal information / positional heuristics.
+ let ordered=realMoves.map(m=>({m,score:aiScore(m)}))
+   .sort((a,b)=>b.score-a.score);
+
+ let bestMove=ordered[0].m;
+ let bestDepth=0;
+ let completedScores=ordered.map(x=>({m:x.m,score:x.score}));
+
+ // Iterative deepening. Root beam narrows only after shallower searches
+ // have had a chance to rank moves.
+ for(let depth=2;depth<=8;depth++){
+   if(performance.now()>=deadline)break;
+   const rootLimit=depth===2?Math.min(22,completedScores.length):
+                   depth===3?Math.min(16,completedScores.length):
+                   depth===4?Math.min(12,completedScores.length):
+                   depth===5?Math.min(10,completedScores.length):
+                   depth===6?Math.min(8,completedScores.length):6;
+   const roots=completedScores.slice(0,rootLimit);
+   const scores=[];
+   let complete=true;
+
+   for(let k=0;k<roots.length;k++){
+     if(performance.now()>=deadline){complete=false;break}
+     const m=roots[k].m;
+     try{
+       const tr=engineApplyCertainMove(state,m,'A');
+       let val;
+       if(tr.uncertain){
+         val=engineStaticEval(state)+tr.terminalDelta;
+       }else{
+         val=engineSearch(tr.state,'H',depth-1,-Infinity,Infinity,ctx,1);
+       }
+
+       // Small root priors only; search dominates.
+       val += aiScore(m)*0.11;
+
+       // Stratego-specific information value and Växlarens current phase.
+       const swp=switcherProfile();
+       const probe=scoutProbeBonus(m);
+       if(probe>0)val+=probe*0.92*swp.info;
+       val+=switcherBackRaidBonus(m)*0.88;
+       val-=switcherMinerPenalty(m)*0.45;
+
+       scores.push({m,score:val});
+     }catch(e){
+       if(e===timeoutToken||e.engineTimeout){complete=false;break}
+       throw e;
+     }
+
+     if((k&1)===1){
+       const elapsed=(performance.now()-start)/1000;
+       status.textContent='Datorn tänker… '+elapsed.toFixed(1).replace('.',',')+' s · djup '+depth;
+       await engineYield();
+     }
+   }
+
+   if(complete&&scores.length===roots.length){
+     scores.sort((a,b)=>b.score-a.score);
+     bestMove=scores[0].m;
+     bestDepth=depth;
+
+     // Preserve searched roots first, then unsearched old candidates.
+     const keys=new Set(scores.map(x=>x.m[0]+'-'+x.m[1]));
+     completedScores=scores.concat(
+       completedScores.filter(x=>!keys.has(x.m[0]+'-'+x.m[1]))
+     );
+   }else{
+     break;
+   }
+ }
+
+ lastEngineStats={
+   timeMs:Math.round(performance.now()-start),
+   depth:bestDepth||1,
+   nodes:ctx.nodes
+ };
+ return bestMove;
+}
+// ==================== /MOTOR 2.0 ======================
+
+function computerTurn(){
+ const resignation=resignationAssessment();
+ if(resignation.resign){
+   computerResigns(resignation);
+   return;
+ }
+
+ let moves=strictMoves(aiSide);
+ if(!moves.length){
+   gameOver=true;busy=false;
+   status.textContent='Datorn kan inte flytta. Du vann!';
+   updateUndoButtons();draw();return;
+ }
+ busy=true;
+ status.textContent='Datorn tänker…';
+
+ setTimeout(async()=>{
+  let choice;
+  try{
+    choice=await engineChooseMove(moves);
+  }catch(e){
+    // Robust fallback to the old heuristic if search ever fails.
+    const ranked=moves.map(m=>({m,score:aiScore(m)})).sort((a,b)=>b.score-a.score);
+    choice=ranked[0].m;
+    lastEngineStats={timeMs:0,depth:0,nodes:0};
+  }
+
+  if(!isStrictlyLegalMove(choice,aiSide)){
+    const fallback=strictMoves(aiSide);
+    if(!fallback.length){
+      gameOver=true;busy=false;
+      status.textContent='Datorn kan inte flytta. Du vann!';
+      updateUndoButtons();draw();return;
+    }
+    choice=fallback[0];
+  }
+
+  let [f,t]=choice;
+  resolveMove(f,t,()=>{
+    busy=false;
+    if(!gameOver){
+      const sec=(lastEngineStats.timeMs/1000).toFixed(1).replace('.',',');
+      {
+        const sw=switcherProfile(),ss=sw.strength;
+        status.textContent='Din tur. Växlaren: '+sw.phase+
+          ' · styrka '+Math.round(ss.ownPts)+'–'+Math.round(ss.oppPts)+
+          ' · högsta '+ss.ownHigh+'–'+ss.oppHigh+
+          ' · tänkte '+sec+' s · djup '+lastEngineStats.depth+'.';
+      }
+    }
+    updateUndoButtons();
+    draw();
+  });
+ },60);
+}
+
+function serializableState(){
+ return {
+   mode,setup,board,selected:null,targets:[],busy:false,gameOver,lastMove:null,
+   history,difficulty,memoryMode,playerSide,aiSide,boardFlipped,
+   turnCount,reserveMiner,humanMoved:[...humanMoved],aiLosses,lastAiMoveSquare,aiMoveCount,aiSeenHuman:[...aiSeenHuman],aiMoveHistory,humanKnownLosses,lastEngineStats,flankActivity,humanActivity,switcherPhase,resignBadCount,
+   statusText:status.textContent
+ };
+}
+function saveGame(){
+ try{
+   if(mode==='play')localStorage.setItem(SAVE_KEY,JSON.stringify(serializableState()));
+ }catch(e){}
+}
+function clearSavedGame(){
+ try{localStorage.removeItem(SAVE_KEY)}catch(e){}
+ document.getElementById('resume').style.display='none';
+ document.getElementById('clearSave').style.display='none';
+}
+function restoreGame(){
+ try{
+   const raw=localStorage.getItem(SAVE_KEY);
+   if(!raw)return false;
+   const s=JSON.parse(raw);
+   mode=s.mode||'play';
+   setup=s.setup||setup;
+   board=s.board||board;
+   selected=null;targets=[];busy=false;undoSnapshot=null;awaitingAiReplay=false;
+   gameOver=!!s.gameOver;
+   history=s.history||[];
+   difficulty='hard';
+   memoryMode=s.memoryMode||'open';
+   playerSide=s.playerSide||'red';
+   aiSide=s.aiSide||'blue';
+   boardFlipped=!!s.boardFlipped;
+   turnCount=s.turnCount||0;
+   reserveMiner=s.reserveMiner||null;
+   humanMoved=new Set(s.humanMoved||[]);
+   aiLosses=s.aiLosses||{};
+   lastAiMoveSquare=(s.lastAiMoveSquare===undefined?null:s.lastAiMoveSquare);
+   aiMoveCount=s.aiMoveCount||0;
+   aiSeenHuman=new Set(s.aiSeenHuman||[]);
+   aiMoveHistory=s.aiMoveHistory||[];
+   humanKnownLosses=s.humanKnownLosses||{};
+   lastEngineStats=s.lastEngineStats||{timeMs:0,depth:0,nodes:0};
+   flankActivity=s.flankActivity||{left:0,right:0};
+   humanActivity=s.humanActivity||{};
+   switcherPhase=s.switcherPhase||'defensiv';
+   updateLossPanel();
+   historyEl.innerHTML=history.map(x=>'• '+x).join('<br>');
+   document.getElementById('smart').style.display='none';
+   document.getElementById('random').style.display='none';
+   const pc=document.getElementById('playerColor'); if(pc)pc.style.display='none';
+   const df=document.getElementById('difficulty'); if(df)df.style.display='none';
+   
+   document.getElementById('start').style.display='none';
+   document.getElementById('resume').style.display='none';
+   const drawBtn=document.getElementById('drawOffer'); if(drawBtn)drawBtn.style.display='inline-block';
+   document.getElementById('new').style.display='inline-block';
+   document.getElementById('clearSave').style.display='inline-block';
+   status.textContent=s.statusText||'Partiet återupptogs.';
+   updateUndoButtons();draw();
+   return true;
+ }catch(e){return false}
+}
+
+function startGame(){
+ playerSide=document.getElementById('playerColor').value;
+ aiSide=playerSide==='red'?'blue':'red';
+ boardFlipped=playerSide==='blue';
+ const playerDifficulty=document.getElementById('difficulty').value;
+ difficulty='hard';
+ memoryMode=playerDifficulty==='colonel'?'memory':'open';
+ aiLosses={};
+ updateLossPanel();
+ board=Array(100).fill(null);
+
+ if(playerSide==='red'){
+   for(let i=0;i<40;i++)board[60+i]={id:String(setup[i]),side:'red',revealed:true,knownToAI:false,uid:'H'+i};
+   let ai=smartAI();for(let i=0;i<40;i++)board[i]={id:String(ai[39-i]),side:'blue',revealed:false,knownToAI:true,uid:'A'+i};
+ } else {
+   for(let i=0;i<40;i++)board[i]={id:String(setup[39-i]),side:'blue',revealed:true,knownToAI:false,uid:'H'+i};
+   let ai=smartAI();for(let i=0;i<40;i++)board[60+i]={id:String(ai[i]),side:'red',revealed:false,knownToAI:true,uid:'A'+i};
+ }
+
+ mode='play';selected=null;targets=[];busy=false;gameOver=false;history=[];historyEl.innerHTML='';
+ turnCount=0;humanMoved=new Set();reserveMiner=null;lastAiMoveSquare=null;aiMoveCount=0;aiSeenHuman=new Set();aiMoveHistory=[];undoSnapshot=null;awaitingAiReplay=false;humanKnownLosses={};lastEngineStats={timeMs:0,depth:0,nodes:0};flankActivity={left:0,right:0};humanActivity={};switcherPhase='defensiv';resignBadCount=0;
+ const minerCandidates=[];
+ for(let i=0;i<100;i++){
+   const p=board[i];
+   if(p&&p.side===aiSide&&p.id==='3'){
+     const r=Math.floor(i/10);
+     const rearDistance=aiSide==='blue'?r:(9-r);
+     minerCandidates.push({uid:p.uid,score:rearDistance});
+   }
+ }
+ minerCandidates.sort((a,b)=>a.score-b.score);
+ if(minerCandidates.length)reserveMiner=minerCandidates[0].uid;
+ document.getElementById('smart').style.display='none';
+ document.getElementById('random').style.display='none';
+ document.getElementById('playerColor').style.display='none';
+ document.getElementById('difficulty').style.display='none';
+ 
+ document.getElementById('start').style.display='none';
+ document.getElementById('drawOffer').style.display='inline-block';
+ document.getElementById('new').style.display='inline-block';
+
+ if(playerSide==='red'){
+   status.textContent='Din tur. Du spelar rött.';updateUndoButtons();draw();saveGame();
+ } else {
+   status.textContent='Datorn öppnar. Du spelar blått.';draw();
+   busy=true;saveGame();
+   setTimeout(()=>computerTurn(),350);
+ }
+}
+function draw(){
+ boardEl.innerHTML='';
+ for(let vr=0;vr<10;vr++)for(let vc=0;vc<10;vc++){
+  let r=boardFlipped?9-vr:vr,c=boardFlipped?9-vc:vc;
+  let pos=r*10+c,sq=document.createElement('div');sq.className='sq';
+  if(mode==='play' && pos===lastAiMoveSquare) sq.classList.add('last-ai-move');
+  if(isLake(r,c))sq.classList.add('lake');
+  if(mode==='setup'&&r>=6){
+   let i=(r-6)*10+c,id=setup[i];
+   if(i===selected)sq.classList.add('selected');
+   sq.appendChild(makePiece(id,'red'));sq.onclick=()=>setupTap(i);
+  }else if(mode==='play'){
+   let p=board[pos];
+   if(pos===selected)sq.classList.add('selected');
+   if(targets.includes(pos))sq.classList.add('target');
+   if(p)sq.appendChild(makePiece(p.id,p.side==='red'?'red':'blue',
+   p.side!==playerSide && (memoryMode==='memory' || !p.revealed)));
+   sq.onclick=()=>playerTap(pos);
+  }
+  boardEl.appendChild(sq);
+ }
+}
+document.getElementById('smart').onclick=()=>{setup=smart();selected=null;status.textContent='Ny vettigt slumpad uppställning.';draw()};
+document.getElementById('random').onclick=()=>{setup=shuffle(bag());selected=null;status.textContent='Helt slumpad uppställning.';draw()};
+document.getElementById('start').onclick=startGame;
+
+
+document.getElementById('undoMove').onclick=undoLastMove;
+document.getElementById('replayAI').onclick=replayComputerMove;
+
+document.getElementById('drawOffer').onclick=()=>{
+ if(gameOver||busy||awaitingAiReplay)return;
+ const humanMovers=honestPotentialHumanMoves().length;
+ const aiMovers=allMoves(aiSide).length;
+ let acceptChance=veryClearlyAhead()?0.22:0.92;
+ // I låsta slutspel är den ännu mer nöjd med remi om den inte tydligt leder.
+ if(!veryClearlyAhead()&&(humanMovers<5||aiMovers<5))acceptChance=0.96;
+ if(Math.random()<acceptChance){
+   gameOver=true;
+   status.textContent='Datorn accepterade oavgjort.';
+   document.getElementById('drawOffer').style.display='none';
+ }else{
+   status.textContent='Datorn avböjde oavgjort. Din tur.';
+ }
+};
+
+document.getElementById('resume').onclick=restoreGame;
+document.getElementById('clearSave').onclick=clearSavedGame;
+document.getElementById('new').onclick=()=>{clearSavedGame();location.reload();};
+setup=smart();updateLossPanel();draw();
+try{
+ if(localStorage.getItem(SAVE_KEY)){
+   document.getElementById('resume').style.display='inline-block';
+   document.getElementById('clearSave').style.display='inline-block';
+   status.textContent='Ett sparat parti finns.';
+ }
+}catch(e){}
+})();
+
+document.addEventListener('touchmove',e=>{
+ if(e.touches&&e.touches.length>1)e.preventDefault();
+},{passive:false});
+document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+
+window.addEventListener('error',()=>{try{saveGame()}catch(e){}});
+window.addEventListener('beforeunload',()=>{try{saveGame()}catch(e){}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)try{saveGame()}catch(e){}});
+setInterval(()=>{if(mode==='play'&&!busy)saveGame()},4000);
+
+document.addEventListener('touchstart',e=>{
+ if(e.touches&&e.touches.length>1)e.preventDefault();
+},{passive:false});
+document.addEventListener('touchmove',e=>{
+ if(e.touches&&e.touches.length>1)e.preventDefault();
+},{passive:false});
+document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+</script>
+<div style="max-width:650px;margin:4px auto 12px;color:#8796a3;font:11px system-ui;text-align:center">GitHub-utgåva · autosparning lokalt i webbläsaren</div><div id="creatorCredit">Created by Mattias Berggren</div>
+</body>
+</html>
