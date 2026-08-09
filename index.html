@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Mini Stratego</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:#17202a;color:#f4f4f4;font-family:system-ui,-apple-system,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;padding:8px}
+h1{font-size:21px;margin:2px 0 4px}
+#status{min-height:30px;font-size:14px;text-align:center;margin-bottom:6px;max-width:650px}
+#board{width:min(96vw,650px);height:min(96vw,650px);display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(10,1fr);border:3px solid #b9a36b;background:#b9a36b;gap:1px}
+.sq{display:flex;align-items:center;justify-content:center;position:relative;background:#d8c58c;min-width:0;min-height:0;touch-action:manipulation;overflow:hidden}
+.sq:nth-child(odd){background:#cfb979}
+.lake{background:#4c87a8!important}.lake:after{content:"≈";font-size:clamp(18px,5vw,34px);color:#bfe7f5;opacity:.9}
+.piece{width:90%;height:90%;border-radius:9px;border:2px solid #e6bd55;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;font-weight:900;line-height:1;box-shadow:0 3px 7px rgba(0,0,0,.45),inset 0 2px 0 rgba(255,255,255,.24),inset 0 -2px 0 rgba(0,0,0,.22);user-select:none;-webkit-user-select:none;position:relative;overflow:hidden}
+.red{background:linear-gradient(145deg,#c83a33,#8f1717 72%)}.blue{background:linear-gradient(145deg,#3b6ec8,#173d8f 72%);border-color:#9dc2ff}
+.hidden .sym{font-size:clamp(16px,5vw,30px);color:#dfe9ff}.piece:before{content:"";position:absolute;inset:3px;border:1px solid rgba(255,226,137,.48);border-radius:6px;pointer-events:none}
+.piece .sym{font-size:clamp(16px,4.7vw,30px);text-shadow:0 1px 2px rgba(0,0,0,.55);z-index:1}.piece .rank{font-size:clamp(10px,2.7vw,16px);margin-top:2px;color:#fff7cf;text-shadow:0 1px 2px rgba(0,0,0,.7);z-index:1}
+.flag .sym{color:#ffd84d}.bomb .sym{color:#1e1e1e}.spy .sym{color:#d7a1ff}.scout .sym{color:#8fdcff}.miner .sym{color:#ffad55}.low .sym{color:#8ef0a6}.mid .sym{color:#91bfff}.high .sym{color:#d5b2ff}.marshal .sym{color:#ffd84d}
+.selected .piece{outline:4px solid #fff06a;outline-offset:2px;transform:translateY(-2px) scale(1.03)}.target{box-shadow:inset 0 0 0 5px rgba(70,230,110,.65)}
+.sq.last-ai-move{outline:6px solid #fff06a;outline-offset:-6px;box-shadow:inset 0 0 0 2px rgba(0,0,0,.82),inset 0 0 22px rgba(255,240,106,.82),0 0 10px rgba(255,240,106,.7);z-index:2}
+.sq.last-ai-move:after{content:"●";position:absolute;right:3px;top:0px;font-size:16px;line-height:1;color:#fff06a;text-shadow:0 1px 3px #000;z-index:5;pointer-events:none}
+#controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:9px}button,select{min-height:43px;padding:0 13px;border-radius:10px;border:1px solid #aaa;background:#283747;color:#fff;font-size:15px}
+#legend{max-width:650px;margin-top:8px;font-size:11px;line-height:1.45;color:#ccd3d8;text-align:center}
+#lossPanel{width:min(96vw,650px);margin:7px auto;padding:7px 9px;border:1px solid #53606a;border-radius:9px;font-size:12px;color:#d7dde2;background:#20272d}#lossPanel strong{display:block;margin-bottom:3px}#lossList{display:flex;flex-wrap:wrap;gap:5px 10px}
+#history{width:min(96vw,650px);max-height:125px;overflow:auto;margin-top:8px;padding:8px 10px;border-radius:10px;background:#101820;border:1px solid #40515f;font-size:12px;line-height:1.45;color:#dce5ea}#history:empty{display:none}
+#creatorCredit{width:min(96vw,650px);margin:8px auto 14px;text-align:center;font-size:12px;color:#9eabb5;letter-spacing:.2px}
+#battle{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:20}#battleBox{background:#1f2b38;border:2px solid #d7c37a;border-radius:18px;padding:18px 22px;text-align:center;min-width:260px}#battleRow{display:flex;align-items:center;justify-content:center;gap:16px;font-size:34px;margin:14px 0}#battleRow .piece{width:72px;height:72px;flex:none}#continueBattle{display:none;margin:8px auto 0;background:#3b536b;border-color:#d7c37a}
+
+/* Board atmosphere */
+#board{position:relative;box-shadow:0 10px 28px rgba(0,0,0,.34)}
+.sq:not(.lake){background-image:radial-gradient(circle at 18% 22%,rgba(255,255,255,.10) 0 1px,transparent 2px),linear-gradient(135deg,rgba(83,116,55,.10),transparent 42%)}
+.lake{background:linear-gradient(160deg,#3c7899,#5d98b6 55%,#397391)!important}
+.lake:before{content:"";position:absolute;inset:0;pointer-events:none;background:
+ radial-gradient(ellipse at 12% 18%,#315e38 0 8%,transparent 9%),
+ radial-gradient(ellipse at 88% 78%,#315e38 0 8%,transparent 9%),
+ radial-gradient(ellipse at 82% 16%,#497944 0 6%,transparent 7%),
+ radial-gradient(ellipse at 18% 82%,#497944 0 6%,transparent 7%);opacity:.82}
+.lake:after{z-index:1;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+
+/* Slightly more physical playing pieces */
+.piece{background-blend-mode:screen;transition:transform .15s ease,filter .15s ease;isolation:isolate}
+.piece:after{content:"";position:absolute;left:8%;right:8%;top:4%;height:22%;border-radius:50%;background:linear-gradient(rgba(255,255,255,.23),rgba(255,255,255,0));opacity:.6;pointer-events:none;z-index:0}
+.piece.marshal{border-color:#ffe07a;box-shadow:0 3px 8px rgba(0,0,0,.48),inset 0 0 0 1px rgba(255,225,118,.62),inset 0 2px 0 rgba(255,255,255,.30)}
+.piece.high{border-color:#d9d7e8}
+.piece.spy{border-style:double;border-width:3px}
+.piece.flag{border-color:#ffe68c}
+.piece.hidden{filter:saturate(.82) brightness(.84)}
+.piece.hidden:before{border-color:rgba(220,229,240,.28)}
+
+/* Deployment animation */
+#board.deploying .piece{animation:deployPiece .58s cubic-bezier(.2,.85,.25,1) both;animation-delay:var(--deploy-delay,0ms)}
+@keyframes deployPiece{0%{opacity:0;transform:translateY(var(--deploy-y,18px)) scale(.74)}70%{opacity:1;transform:translateY(-2px) scale(1.03)}100%{opacity:1;transform:none}}
+
+/* Opening and end overlays */
+#opening,#endScreen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 42%,rgba(37,52,47,.76),rgba(8,14,19,.94));z-index:40;overflow:hidden}
+#opening.show,#endScreen.show{display:flex}
+.openingCard,.endCard{text-align:center;padding:24px 28px;max-width:88vw;position:relative;z-index:3;text-shadow:0 2px 8px #000}
+.openingTitle{font-family:Georgia,serif;font-weight:800;letter-spacing:.14em;font-size:clamp(38px,11vw,76px);color:#f2df9a;animation:titleIn .8s ease both}
+.openingSub{margin-top:9px;font-size:clamp(15px,4vw,22px);color:#eef4e6;letter-spacing:.08em;animation:subIn .8s .28s ease both}
+.openingLine{height:2px;width:min(330px,65vw);margin:14px auto;background:linear-gradient(90deg,transparent,#d7c37a,transparent);animation:lineGrow .8s .15s ease both}
+@keyframes titleIn{from{opacity:0;transform:scale(.82);letter-spacing:.28em}to{opacity:1;transform:none}}
+@keyframes subIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes lineGrow{from{transform:scaleX(0);opacity:0}to{transform:scaleX(1);opacity:1}}
+
+.endTitle{font-family:Georgia,serif;font-weight:900;font-size:clamp(42px,13vw,86px);letter-spacing:.08em;color:#ffe083;animation:victoryPop .55s cubic-bezier(.2,.9,.2,1.2) both}
+.endTitle.loss{color:#e7e7e7;font-size:clamp(34px,10vw,68px)}
+.endMessage{font-size:clamp(16px,4.5vw,23px);margin:8px 0 18px;color:#f3f0df}
+#closeEnd{background:#3b536b;border:1px solid #d7c37a;padding:0 20px}
+@keyframes victoryPop{0%{opacity:0;transform:scale(.45) rotate(-4deg)}70%{opacity:1;transform:scale(1.08) rotate(1deg)}100%{transform:none}}
+.confetti{position:absolute;width:9px;height:16px;top:-22px;border-radius:2px;animation:confettiFall var(--dur) linear forwards;transform:rotate(var(--rot))}
+@keyframes confettiFall{0%{transform:translate3d(0,-8vh,0) rotate(0deg)}100%{transform:translate3d(var(--drift),112vh,0) rotate(760deg)}}
+.endFlag{font-size:58px;display:block;margin-bottom:4px;animation:flagBounce .75s ease both}
+@keyframes flagBounce{0%{opacity:0;transform:translateY(30px) rotate(-9deg)}65%{opacity:1;transform:translateY(-6px) rotate(5deg)}100%{transform:none}}
+
+</style>
+</head>
+<body>
+<h1>Mini Stratego</h1>
+<div id="status">Uppställning: tryck på två pjäser för att byta plats.</div>
+<div id="board"></div>
+<div id="controls">
+<button id="smart">Slumpa vettigt</button><button id="random">Helt slumpat</button>
+<select id="playerColor"><option value="red" selected>Spela rött</option><option value="blue">Spela blått</option></select>
+<select id="difficulty"><option value="captain" selected>Kapten</option><option value="colonel">Överste</option></select>
+<button id="start">Starta spel</button><button id="resume" style="display:none">Fortsätt sparat parti</button>
+<button id="drawOffer" style="display:none">Bjud oavgjort</button><button id="undoMove" style="display:none">Ta tillbaka senaste draget</button><button id="replayAI" style="display:none">Låt datorn spela igen</button>
+<button id="new" style="display:none">Nytt parti</button><button id="clearSave" style="display:none">Radera sparat</button>
+</div>
+<div id="legend">Ta motståndarens flagga. Spejare går valfritt antal rutor i raka linjer. Minören desarmerar bomber. Spionen besegrar marskalken när spionen anfaller.</div>
+<div id="lossPanel"><strong>Datorns högsta kvar</strong><div id="lossList">Marskalk · General · Överste ×2 · Spion</div></div>
+<div id="history"></div>
+<div id="creatorCredit">Created by Mattias Berggren</div>
+<div id="battle"><div id="battleBox"><div id="battleText"></div><div id="battleRow"></div><button id="continueBattle">Fortsätt</button></div></div>
+<div id="opening"><div class="openingCard"><div class="openingTitle">STRATEGO</div><div class="openingLine"></div><div class="openingSub">Bered dig på strid!</div></div></div>
+<div id="endScreen"><div class="endCard"><span id="endFlag" class="endFlag">⚑</span><div id="endTitle" class="endTitle">SEGER!</div><div id="endMessage" class="endMessage"></div><button id="closeEnd">Till brädet</button></div></div>
+<script>
+(function(){
+'use strict';
+const boardEl=document.getElementById('board'),status=document.getElementById('status'),historyEl=document.getElementById('history');
+const battle=document.getElementById('battle'),battleText=document.getElementById('battleText'),battleRow=document.getElementById('battleRow'),continueBattle=document.getElementById('continueBattle');
+const opening=document.getElementById('opening'),endScreen=document.getElementById('endScreen'),endTitle=document.getElementById('endTitle'),endMessage=document.getElementById('endMessage'),endFlag=document.getElementById('endFlag');
+const defs=[
+{id:'F',sym:'⚑',name:'Flagga',n:1},{id:'B',sym:'✹',name:'Bomb',n:6},{id:'S',sym:'◈',name:'Spion',n:1},
+{id:'2',sym:'➶',name:'Spejare',n:8},{id:'3',sym:'⚒',name:'Minör',n:5},{id:'4',sym:'▪',name:'Sergeant',n:4},{id:'5',sym:'▪',name:'Löjtnant',n:4},{id:'6',sym:'▪',name:'Kapten',n:4},{id:'7',sym:'★',name:'Major',n:3},{id:'8',sym:'★',name:'Överste',n:2},{id:'9',sym:'★',name:'General',n:1},{id:'10',sym:'★',name:'Marskalk',n:1}];
+const map=Object.fromEntries(defs.map(d=>[d.id,d]));
+const SAVE_KEY='miniStrategoFullV114';
+let mode='setup',setup=[],board=Array(100).fill(null),selected=null,targets=[],busy=false,gameOver=false,history=[];
+let playerSide='red',aiSide='blue',boardFlipped=false,memoryMode='open';
+let aiLosses={},humanKnownLosses={},humanMoved=new Set(),aiSeenHuman=new Set(),aiMoveHistory=[],humanMoveTrail=[];
+let aiMoveCount=0,turnCount=0,lastBattleTurn=0,lastAiMoveSquare=null,reserveMiner=null,resignBadCount=0,switcherPhase='defensiv';
+let undoSnapshot=null,awaitingAiReplay=false,lastEngineStats={timeMs:0,depth:0,nodes:0};
+let aiFirewallActive=false;
+
+function pieceClass(id){if(id==='F')return'flag';if(id==='B')return'bomb';if(id==='S')return'spy';if(id==='2')return'scout';if(id==='3')return'miner';if(['4','5','6'].includes(id))return'low';if(['7','8'].includes(id))return'mid';if(id==='9')return'high';if(id==='10')return'marshal';return''}
+function bag(){const a=[];defs.forEach(d=>{for(let i=0;i<d.n;i++)a.push(d.id)});return a}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function isLake(r,c){return(r===4||r===5)&&((c===2||c===3)||(c===6||c===7))}
+function movable(id){return id!=='F'&&id!=='B'}
+function strength(id){if(id==='S')return 1;if(id==='F')return 0;if(id==='B')return 99;return Number(id)}
+function manhattan(a,b){return Math.abs(Math.floor(a/10)-Math.floor(b/10))+Math.abs((a%10)-(b%10))}
+function ownAdvanceDepth(pos){const r=Math.floor(pos/10);return aiSide==='blue'?r:9-r}
+function onOpponentSide(pos){const r=Math.floor(pos/10);return aiSide==='blue'?r>=6:r<=3}
+function opponentBackRow(){return playerSide==='red'?9:0}
+function makePiece(id,color,hidden=false){const d=map[id],p=document.createElement('div');p.className='piece '+color+' '+pieceClass(id)+(hidden?' hidden':'');p.innerHTML=hidden?'<div class="sym">?</div>':'<div class="sym">'+d.sym+'</div><div class="rank">'+id+'</div>';return p}
+
+
+function buildSmartSetup(forAI=false){
+ const cells=Array(40).fill(null);
+ let remaining=bag();
+ const removeOne=id=>{const j=remaining.indexOf(id);if(j>=0)remaining.splice(j,1)};
+ const open=pos=>pos>=0&&pos<40&&cells[pos]===null;
+ const place=(pos,id)=>{if(!open(pos))return false;cells[pos]=id;removeOne(id);return true};
+ const placeFirst=(prefs,id)=>{for(const p of prefs){if(place(p,id))return p}return -1};
+ const countId=id=>cells.filter(v=>v===id).length;
+
+ // 1) Flaggnäste först: flaggan varierar, men ligger längst bak och har bombsäkring direkt.
+ // Vi håller helst flaggan borta från hörnen så två sidobomber får plats från start.
+ const fc=shuffle([1,2,3,4,5,6,7,8])[0];
+ place(30+fc,'F');
+ // Grundbunker: två sidobomber längst bak plus en bomb ovanför.
+ for(const p of [30+fc-1,30+fc+1,20+fc])place(p,'B');
+ // Resterande bomber hålls nära bakre halvan, gärna kring nästet men utan att låsa allt i ett mönster.
+ let extraBombPrefs=shuffle([
+   20+Math.max(0,fc-1),20+Math.min(9,fc+1),
+   10+fc,10+Math.max(0,fc-1),10+Math.min(9,fc+1),
+   20+Math.max(0,fc-2),20+Math.min(9,fc+2),
+   11,12,13,14,15,16,17,18,21,22,23,24,25,26,27,28
+ ].filter((v,i,a)=>a.indexOf(v)===i));
+ while(countId('B')<6&&extraBombPrefs.length)place(extraBombPrefs.shift(),'B');
+ if(countId('B')<6){
+   let otherBombs=shuffle([...Array(20)].map((_,k)=>10+k).filter(open));
+   while(countId('B')<6&&otherBombs.length)place(otherBombs.pop(),'B');
+ }
+
+ // 2) Alla minörer längst bak om möjligt. Det går nu eftersom bara flagga + två bakre bomber tar rad 3.
+ let backRow=shuffle([...Array(10)].map((_,c)=>30+c).filter(open));
+ while(countId('3')<5&&backRow.length)place(backRow.pop(),'3');
+ if(countId('3')<5){
+   let rearSupport=shuffle([...Array(10)].map((_,c)=>20+c).filter(open));
+   while(countId('3')<5&&rearSupport.length)place(rearSupport.pop(),'3');
+ }
+
+ // 3) Främsta raden är kontaktpjäser, aldrig minörer. Låt AI-uppställningen vara lite mer återhållsam.
+ const front=shuffle([...Array(10)].map((_,i)=>i).filter(open));
+ const frontMix=forAI?['2','2','2','4','4','5','6']:['2','2','2','2','4','4','5','6'];
+ for(const id of frontMix){if(!front.length)break;place(front.pop(),id)}
+
+ // 4) Två separata kraftgrupper: 10 ensam på ena sidan, 9+S ihop på andra.
+ // De ska inte stå ute i ytterhörnen, utan isär men ändå kunna rycka in över flera flanker.
+ let spyPos=-1,generalPos=-1,marshalPos=-1;
+ const pairLeft=Math.random()<.5;
+ const pairPrefs=pairLeft?
+   [[22,23],[21,22],[23,24],[32,33],[31,32]]:
+   [[26,27],[27,28],[25,26],[36,37],[37,38]];
+ const marshalPrefs=pairLeft?
+   [27,26,28,17,16,18,37,36,38]:
+   [22,23,21,12,13,11,32,33,31];
+ for(const pair of pairPrefs){
+   if(open(pair[0])&&open(pair[1])){
+     if(Math.random()<.5){generalPos=pair[0];spyPos=pair[1]}else{generalPos=pair[1];spyPos=pair[0]}
+     place(generalPos,'9');place(spyPos,'S');
+     break;
+   }
+ }
+ if(generalPos<0||spyPos<0){
+   const allRear=shuffle([11,12,13,14,15,16,17,18,21,22,23,24,25,26,27,28,31,32,33,34,35,36,37,38].filter(open));
+   let found=null;
+   for(const a of allRear){for(const b of allRear){if(a!==b&&manhattan(a,b)===1){found=[a,b];break}}if(found)break}
+   if(found){generalPos=found[0];spyPos=found[1];place(generalPos,'9');place(spyPos,'S')}
+ }
+ marshalPos=placeFirst(marshalPrefs,'10');
+ if(marshalPos<0){marshalPos=placeFirst(shuffle([12,13,16,17,21,22,27,28,31,32,37,38]),'10')}
+
+ // 5) 8:or och 7:or sprids över olika flanker i stället för att klumpas.
+ const leftWing=shuffle([11,12,13,21,22,23,1,2,3,4,31,32]);
+ const rightWing=shuffle([16,17,18,26,27,28,6,7,8,9,37,38]);
+ placeFirst(leftWing,'8');
+ placeFirst(rightWing,'8');
+ placeFirst(shuffle([21,11,12,23,2,3,31,32]),'7');
+ placeFirst(shuffle([28,17,18,26,7,8,37,38]),'7');
+
+ // 6) Några rörliga försvarare nära nästet, men utan att överfylla en sida.
+ const guardPrefs=shuffle([
+   20+Math.max(0,fc-2),20+Math.min(9,fc+2),10+Math.max(0,fc-1),10+Math.min(9,fc+1),
+   20+Math.max(0,fc-3),20+Math.min(9,fc+3),10+fc
+ ].filter((v,i,a)=>a.indexOf(v)===i));
+ for(const id of ['6','5','4']){
+   if(remaining.includes(id))placeFirst(guardPrefs,id)
+ }
+
+ // 7) Resten fylls ut utan att förstöra grundtanken.
+ const empt=shuffle(cells.map((v,i)=>v===null?i:null).filter(v=>v!==null));
+ shuffle(remaining);
+ empt.forEach((s,i)=>{if(cells[s]===null)cells[s]=remaining[i]});
+ return cells;
+}
+
+function smart(){return buildSmartSetup(false)}
+function smartAI(){return buildSmartSetup(true)}
+
+function setupTap(i){if(selected===null){selected=i;status.textContent='Välj pjäsen som den ska byta plats med.';draw();return}if(selected===i){selected=null;status.textContent='Markeringen togs bort.';draw();return}[setup[selected],setup[i]]=[setup[i],setup[selected]];selected=null;status.textContent='Pjäserna bytte plats.';draw()}
+function movesFrom(pos,side,unknownAsStep=false){
+ const p=board[pos];if(!p||p.side!==side||!movable(p.id))return[];const r=Math.floor(pos/10),c=pos%10,out=[],dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+ const max=(p.id==='2'&&!unknownAsStep)?9:1;
+ for(const[dr,dc]of dirs)for(let s=1;s<=max;s++){const nr=r+dr*s,nc=c+dc*s;if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;const j=nr*10+nc,t=board[j];if(!t)out.push(j);else{if(t.side!==side)out.push(j);break}}
+ return out;
+}
+function legalMoves(pos){const p=board[pos];return p&&p.side===playerSide?movesFrom(pos,playerSide):[]}
+function allMoves(side){const out=[];for(let i=0;i<100;i++){const p=board[i];if(!p||p.side!==side||!movable(p.id))continue;for(const t of movesFrom(i,side))out.push([i,t])}return out}
+function strictMoves(side){return allMoves(side)}
+function battleResult(a,d){const A=String(a.id),D=String(d.id);if(D==='F')return 1;if(D==='B')return A==='3'?1:-1;if(A==='S'&&D==='10')return 1;if(A==='10'&&D==='S')return 1;const sa=strength(A),sd=strength(D);return sa>sd?1:sa<sd?-1:0}
+function addHistory(a,d,res){const A=a.side==='red'?'Röd':'Blå',D=d.side==='red'?'röd':'blå';let line;if(res===0)line=A+' '+map[a.id].name+' mötte '+D+' '+map[d.id].name+' – båda försvann.';else line=A+' '+map[a.id].name+' angrep '+D+' '+map[d.id].name+' och '+(res>0?'vann':'förlorade')+'.';history.unshift(line);history=history.slice(0,12);historyEl.innerHTML=history.map(x=>'• '+x).join('<br>')}
+function showBattle(a,d,res,cb){battleText.innerHTML='<strong>'+map[a.id].name+' ('+a.id+')</strong> angriper <strong>'+map[d.id].name+' ('+d.id+')</strong><br>'+(res>0?'Anfallaren vinner':res<0?'Försvararen vinner':'Båda slås ut');battleRow.innerHTML='';battleRow.appendChild(makePiece(a.id,a.side==='red'?'red':'blue'));const x=document.createElement('div');x.textContent='⚔️';battleRow.appendChild(x);battleRow.appendChild(makePiece(d.id,d.side==='red'?'red':'blue'));battle.style.display='flex';continueBattle.style.display='inline-block';continueBattle.onclick=()=>{continueBattle.onclick=null;continueBattle.style.display='none';battle.style.display='none';cb()}}
+function updateLossPanel(){const p=document.getElementById('lossPanel'),b=document.getElementById('lossList');if(memoryMode==='memory'){p.style.display='none';return}p.style.display='block';const officerOrder=['10','9','8','7','6','5','4'],parts=[];let slots=4;for(const id of officerOrder){if(slots<=0)break;const alive=Math.max(0,map[id].n-(aiLosses[id]||0));if(!alive)continue;const shown=Math.min(alive,slots);parts.push(map[id].name+(shown>1?' ×'+shown:''));slots-=shown}const spyAlive=Math.max(0,map.S.n-(aiLosses.S||0));if(spyAlive)parts.push('Spion');b.textContent=parts.length?parts.join(' · '):'Inga höga officerare kvar'}
+function recordLoss(piece){if(piece.side===aiSide)aiLosses[piece.id]=(aiLosses[piece.id]||0)+1;else humanKnownLosses[piece.id]=(humanKnownLosses[piece.id]||0)+1;updateLossPanel()}
+
+function snapshot(actor){return{actor,board:board.map(p=>p?{...p}:null),history:[...history],aiLosses:{...aiLosses},humanKnownLosses:{...humanKnownLosses},humanMoved:[...humanMoved],aiSeenHuman:[...aiSeenHuman],aiMoveHistory:aiMoveHistory.map(x=>({...x})),humanMoveTrail:humanMoveTrail.map(x=>({...x})),aiMoveCount,turnCount,lastBattleTurn,lastAiMoveSquare,reserveMiner,resignBadCount,switcherPhase,gameOver,statusText:status.textContent}}
+function restoreSnapshot(s){board=s.board.map(p=>p?{...p}:null);history=[...s.history];historyEl.innerHTML=history.map(x=>'• '+x).join('<br>');aiLosses={...s.aiLosses};humanKnownLosses={...s.humanKnownLosses};humanMoved=new Set(s.humanMoved||[]);aiSeenHuman=new Set(s.aiSeenHuman||[]);aiMoveHistory=(s.aiMoveHistory||[]).map(x=>({...x}));humanMoveTrail=(s.humanMoveTrail||[]).map(x=>({...x}));aiMoveCount=s.aiMoveCount||0;turnCount=s.turnCount||0;lastBattleTurn=s.lastBattleTurn||0;lastAiMoveSquare=s.lastAiMoveSquare??null;reserveMiner=s.reserveMiner||null;resignBadCount=s.resignBadCount||0;switcherPhase=s.switcherPhase||'defensiv';gameOver=!!s.gameOver;selected=null;targets=[];busy=false;updateLossPanel()}
+function updateUndoButtons(){document.getElementById('undoMove').style.display=(mode==='play'&&undoSnapshot&&!awaitingAiReplay)?'inline-block':'none';document.getElementById('replayAI').style.display=(mode==='play'&&awaitingAiReplay)?'inline-block':'none'}
+function undoLastMove(){if(!undoSnapshot||busy)return;const s=undoSnapshot;restoreSnapshot(s);undoSnapshot=null;if(s.actor===aiSide){awaitingAiReplay=true;status.textContent='Datorns senaste drag är återtaget. Tryck “Låt datorn spela igen” när du vill fortsätta.'}else{awaitingAiReplay=false;status.textContent='Ditt senaste drag är återtaget. Din tur.'}updateUndoButtons();draw();saveGame()}
+function replayComputerMove(){if(!awaitingAiReplay||busy||gameOver)return;awaitingAiReplay=false;updateUndoButtons();computerTurn()}
+
+function launchConfetti(){
+ endScreen.querySelectorAll('.confetti').forEach(x=>x.remove());
+ const palette=['#ffe06a','#f4f0dd','#d15a47','#5d8fd8','#7bbb68'];
+ for(let i=0;i<54;i++){const x=document.createElement('i');x.className='confetti';x.style.left=(2+Math.random()*96)+'vw';x.style.background=palette[i%palette.length];x.style.setProperty('--dur',(1.9+Math.random()*2.1)+'s');x.style.setProperty('--drift',(-70+Math.random()*140)+'px');x.style.setProperty('--rot',(Math.random()*180)+'deg');x.style.animationDelay=(Math.random()*.45)+'s';endScreen.appendChild(x)}
+}
+function showEnd(kind,message){
+ endTitle.className='endTitle'+(kind==='win'?'':' loss');
+ if(kind==='win'){endTitle.textContent='SEGER!';endFlag.textContent='⚑';launchConfetti()}
+ else if(kind==='loss'){endTitle.textContent='SLAGET ÄR FÖRLORAT';endFlag.textContent='⚑'}
+ else{endTitle.textContent='OAVGJORT';endFlag.textContent='⚔';}
+ endMessage.textContent=message||'';endScreen.classList.add('show');
+}
+function runOpening(){
+ opening.classList.add('show');boardEl.classList.add('deploying');
+ setTimeout(()=>opening.classList.remove('show'),1450);
+ setTimeout(()=>boardEl.classList.remove('deploying'),2050);
+}
+document.getElementById('closeEnd').onclick=()=>endScreen.classList.remove('show');
+
+function resolveMove(from,to,after){
+ const a=board[from],d=board[to];if(!a)return;undoSnapshot=snapshot(a.side);awaitingAiReplay=false;updateUndoButtons();
+ if(a.side===aiSide){lastAiMoveSquare=to;aiMoveHistory.push({from,to,uid:a.uid});if(aiMoveHistory.length>16)aiMoveHistory.shift();aiMoveCount++;if(a.id==='2'&&manhattan(from,to)>1)a.knownToHuman=true}
+ else{humanMoved.add(a.uid);humanMoveTrail.push({uid:a.uid,from,to,turn:turnCount});if(humanMoveTrail.length>20)humanMoveTrail.shift();if(a.id==='2'&&manhattan(from,to)>1){a.knownToAI=true;aiSeenHuman.add(a.uid)}}
+ turnCount++;
+ if(!d){board[to]=a;board[from]=null;saveGame();after();return}
+ lastBattleTurn=turnCount;
+ if(a.side===playerSide){a.knownToAI=true;aiSeenHuman.add(a.uid)}else a.knownToHuman=true;
+ if(d.side===playerSide){d.knownToAI=true;aiSeenHuman.add(d.uid)}else d.knownToHuman=true;
+ const res=battleResult(a,d);
+ showBattle(a,d,res,()=>{
+  addHistory(a,d,res);
+  if(d.id==='F'&&res===1){recordLoss(d);board[to]=a;board[from]=null;gameOver=true;busy=false;const humanWin=a.side===playerSide;status.textContent=humanWin?'Du tog flaggan. Du vann!':'Datorn tog flaggan. Du förlorade.';draw();saveGame();setTimeout(()=>showEnd(humanWin?'win':'loss',humanWin?'Fiendens flagga är din.':'Datorn tog din flagga.'),180);return}
+  if(res>0){recordLoss(d);if(memoryMode==='open')a.revealed=true;board[to]=a;board[from]=null}
+  else if(res<0){recordLoss(a);if(memoryMode==='open')d.revealed=true;board[from]=null}
+  else{recordLoss(a);recordLoss(d);board[from]=null;board[to]=null}
+  saveGame();after();
+ })
+}
+function playerTap(pos){if(busy||gameOver||awaitingAiReplay)return;const p=board[pos];if(selected===null){if(p&&p.side===playerSide&&movable(p.id)){selected=pos;targets=legalMoves(pos);status.textContent='Välj en markerad ruta.';draw()}return}if(pos===selected){selected=null;targets=[];status.textContent='Markeringen togs bort.';draw();return}if(targets.includes(pos)){busy=true;const f=selected;selected=null;targets=[];resolveMove(f,pos,()=>{draw();if(!gameOver)computerTurn()})}else if(p&&p.side===playerSide&&movable(p.id)){selected=pos;targets=legalMoves(pos);draw()}else{selected=null;targets=[];draw()}}
+
+
+// ----------------------- AI anti-cheat firewall -----------------------
+// Under datorns hela beslutsfas finns inga riktiga grader kvar på dolda
+// människopjäser i det globala arbetsbrädet.
+function assertAIFirewall(){
+ if(!aiFirewallActive)throw new Error('AI-brandväggen är inte aktiv.');
+ for(const p of board){
+   if(!p||p.side!==playerSide)continue;
+   if(!p.knownToAI && String(p.id)!=='?')
+     throw new Error('ANTI-CHEAT: dold människograd läckte in i AI-brädet.');
+   if(p.knownToAI && String(p.id)==='?')
+     throw new Error('ANTI-CHEAT: känd människograd saknas i AI-brädet.');
+ }
+}
+function beginAIFirewall(){
+ if(aiFirewallActive)throw new Error('AI-brandväggen är redan aktiv.');
+
+ // Domarens sanna grader sparas endast i denna lokala Map.
+ const hiddenTruth=new Map();
+ for(const p of board){
+   if(!p||p.side!==playerSide||p.knownToAI)continue;
+   const id=String(p.id);
+   if(id==='?')throw new Error('Domarbrädet saknar dold grad före AI-draget.');
+   hiddenTruth.set(p.uid,id);
+   p.id='?';
+ }
+
+ // Ta dessutom bort två andra globala vägar till gammal sann information
+ // som AI:n inte behöver alls under sin beräkning.
+ const savedSetup=setup;
+ const savedUndoSnapshot=undoSnapshot;
+ setup=[];
+ undoSnapshot=null;
+
+ aiFirewallActive=true;
+ assertAIFirewall();
+ return {hiddenTruth,savedSetup,savedUndoSnapshot};
+}
+function endAIFirewall(token){
+ // Vissa heuristiker klonar/replacerar board, därför återställs via uid.
+ if(token&&token.hiddenTruth){
+   for(const p of board){
+     if(!p||p.side!==playerSide)continue;
+     const real=token.hiddenTruth.get(p.uid);
+     if(real!==undefined)p.id=real;
+   }
+ }
+ setup=token?token.savedSetup:setup;
+ undoSnapshot=token?token.savedUndoSnapshot:undoSnapshot;
+ aiFirewallActive=false;
+
+ for(const p of board){
+   if(p&&p.side===playerSide&&String(p.id)==='?')
+     throw new Error('Domarbrädet kunde inte återställas efter AI-draget.');
+ }
+}
+
+// ----------------------- AI 1.3: knowledge -----------------------
+function aiKnows(p){return !!(p&&p.side===playerSide&&p.knownToAI)}
+function aliveKnownEnemy(id){const total=map[id].n,lost=humanKnownLosses[id]||0;return lost<total}
+function unknownHumanAdjacent(pos){const r=Math.floor(pos/10),c=pos%10;let n=0;for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>9||nc<0||nc>9)continue;const p=board[nr*10+nc];if(p&&p.side===playerSide&&!p.knownToAI)n++}return n}
+function unknownHumanWithin(pos,dist){let n=0;for(let i=0;i<100;i++){const p=board[i];if(p&&p.side===playerSide&&!p.knownToAI&&manhattan(pos,i)<=dist)n++}return n}
+function recentlyMovedHuman(p){if(!p||p.side!==playerSide)return false;const x=[...humanMoveTrail].reverse().find(m=>m.uid===p.uid);return !!(x&&turnCount-x.turn<=14)}
+function movedTargetBonus(d){if(!d||d.side!==playerSide||d.knownToAI)return 0;let b=0;if(humanMoved.has(d.uid))b+=16;if(recentlyMovedHuman(d))b+=10;return b}
+function rankRevealCost(a){if(!a||a.knownToHuman)return 0;return({S:58,'10':62,'9':50,'8':30,'7':18,'6':9,'5':5,'4':2,'3':7,'2':0}[a.id]||0)}
+function targetImportanceKnown(d){if(!d||!aiKnows(d))return 0;if(d.id==='F')return 200;if(d.id==='B')return 15;if(d.id==='S')return 55;return strength(d.id)*6}
+function cheaperAttackerExists(to,current){
+ if(!board[to]||board[to].side!==playerSide)return false;const cur=strength(current.id);
+ for(let i=0;i<100;i++){const p=board[i];if(!p||p.side!==aiSide||!movable(p.id)||p.uid===current.uid)continue;if(!movesFrom(i,aiSide).includes(to))continue;const v=p.id==='S'?1:strength(p.id);if(v<=6&&v<cur)return true}
+ return false;
+}
+function revealPenalty(move){const[from,to]=move,a=board[from],d=board[to];if(!a||!d||d.side!==playerSide)return 0;let c=rankRevealCost(a);if(!c)return 0;if(aiKnows(d))c-=Math.min(c*.8,targetImportanceKnown(d));if(cheaperAttackerExists(to,a))c*=1.35;return Math.max(0,c)}
+function highExposurePenaltyAt(pos,a){if(!a)return 0;const unk=unknownHumanAdjacent(pos);if(!unk)return 0;let p=0;if(a.id==='10'&&aliveKnownEnemy('S'))p=80;else if(a.id==='9'&&aliveKnownEnemy('10'))p=66;else if(a.id==='8'&&(aliveKnownEnemy('9')||aliveKnownEnemy('10')))p=42;else if(a.id==='7')p=24;else if(a.id==='S')p=74;return p*unk}
+function guarderPowerAgainst(guard,protectedPiece){
+ if(!guard||guard.side!==aiSide)return 0;const pr=protectedPiece.id;
+ // Special hierarchy: S answers enemy 10 when it attacks; 10 answers 9; 9 answers 8, etc.
+ if(pr==='9'&&guard.id==='S')return 1.45;
+ if(pr==='8'&&guard.id==='10')return 1.35;
+ if(pr==='7'&&['9','10'].includes(guard.id))return 1.2;
+ if(['4','5','6','7','8'].includes(pr)&&!['S','2','3'].includes(guard.id)&&strength(guard.id)>strength(pr))return 0.9+0.08*(strength(guard.id)-strength(pr));
+ return 0;
+}
+function guardNetworkScoreFor(bd){
+ let s=0;const positions=[];for(let i=0;i<100;i++){const p=bd[i];if(p&&p.side===aiSide&&movable(p.id))positions.push(i)}
+ for(const pos of positions){const p=bd[pos];const depth=ownAdvanceDepth(pos);if(depth<2||onOpponentSide(pos))continue;let best=0;for(const gpos of positions){if(gpos===pos)continue;const g=bd[gpos],dist=manhattan(pos,gpos);if(dist>2)continue;const gp=guarderPowerAgainst(g,p);if(!gp)continue;const pr=Math.floor(pos/10),gr=Math.floor(gpos/10);const behind=aiSide==='blue'?gr<=pr:gr>=pr;let v=gp*(dist===1?14:8)*(behind?1.25:.75);if(v>best)best=v}s+=best}
+ // S + 9 should remain a coherent anti-marshal pair.
+ let spy=-1,general=-1,marshal=-1;for(const pos of positions){if(bd[pos].id==='S')spy=pos;if(bd[pos].id==='9')general=pos;if(bd[pos].id==='10')marshal=pos}
+ if(spy>=0&&general>=0){const d=manhattan(spy,general);if(d<=2)s+=24;else if(d>=5)s-=13}
+ // One high guard doing two jobs is valuable: reward 10/9 for covering multiple front pieces within two moves.
+ for(const gpos of [marshal,general])if(gpos>=0){let covered=0;for(const pos of positions){if(pos===gpos)continue;const p=bd[pos];if(ownAdvanceDepth(pos)>=3&&['5','6','7','8','9'].includes(p.id)&&manhattan(gpos,pos)<=2)covered++}s+=Math.min(2,covered)*8}
+ return s;
+}
+function guardDelta(move){const[from,to]=move,a=board[from],d=board[to];if(!a)return 0;const before=guardNetworkScoreFor(board);const bd=board.map(p=>p?{...p}:null);if(!d){bd[to]=bd[from];bd[from]=null}else if(d.side===playerSide){if(aiKnows(d)){const res=battleResult(a,d);if(res>0){bd[to]=bd[from];bd[from]=null}else if(res<0)bd[from]=null;else{bd[from]=null;bd[to]=null}}else{bd[to]=bd[from];bd[from]=null}}return guardNetworkScoreFor(bd)-before}
+function probeBonus(move){
+ const[from,to]=move,a=board[from],d=board[to];if(!a||!d||d.side!==playerSide||d.knownToAI)return 0;let b=0;
+ // Information is bought with expendable pieces. Miners are deliberately NOT probes: their bomb role is too important.
+ if(a.id==='2')b+=24;else if(a.id==='4')b+=22;else if(a.id==='5')b+=10;else return 0;
+ b+=movedTargetBonus(d);
+ if(a.id==='2'&&manhattan(from,to)>1)b+=22; // projectile scout: information at low material cost
+ const r=Math.floor(to/10),back=playerSide==='red'?r>=7:r<=2;if(back)b+=8;
+ const dry=Math.max(0,turnCount-lastBattleTurn-6);b+=Math.min(30,dry*2.5);
+ return b;
+}
+function minerProbePenalty(move){const[from,to]=move,a=board[from],d=board[to];if(!a||a.id!=='3'||!d||d.side!==playerSide||d.knownToAI)return 0;
+ // Minören är ett specialverktyg, inte en informationspjäs. Okända rörliga mål är säkert inte bomber.
+ // Även mot orörliga okända mål ska en minör tidigt i partiet nästan aldrig användas som försöksballong.
+ let p=aiMoveCount<24?125:72;
+ if(humanMoved.has(d.uid))p+=240;
+ if(recentlyMovedHuman(d))p+=70;
+ const miners=board.filter(x=>x&&x.side===aiSide&&x.id==='3').length;
+ if(miners<=3)p+=35;if(miners<=2)p+=50;
+ return p}
+function minerAdvancePenalty(move){const[from,to]=move,a=board[from],d=board[to];if(!a||a.id!=='3')return 0;
+ // Känd bomb är minörens jobb och ska alltid få bryta reservregeln.
+ if(d&&aiKnows(d)&&d.id==='B')return 0;
+ const fr=Math.floor(from/10),tr=Math.floor(to/10),adv=aiSide==='blue'?tr-fr:fr-tr;
+ let p=0;
+ // Tidiga minörer ska normalt inte gå ut som ensamma spetsar över mittlinjen.
+ if(aiMoveCount<24&&onOpponentSide(to)){p+=55;
+   let support=0;for(let i=0;i<100;i++){const q=board[i];if(q&&q.side===aiSide&&q.uid!==a.uid&&manhattan(i,to)<=2){support++;break}}
+   if(!support)p+=65;
+ }
+ // Även utan att korsa mittlinjen är flera tidiga framåtdrag i rad oönskade om inget bombmål finns.
+ if(aiMoveCount<18&&adv>0&&ownAdvanceDepth(to)>=4)p+=24;
+ return p}
+function knownBattleScore(a,d){if(!d||!aiKnows(d))return 0;const r=battleResult(a,d);if(r>0){let v=45+targetImportanceKnown(d);if(d.id==='S')v+=65;if(d.id==='10')v+=80;return v}if(r===0)return 6-strength(a.id)*3;return -58-strength(a.id)*7}
+function repetitionPenalty(move){const[f,t]=move;let p=0;const h=aiMoveHistory;if(h.length){const x=h[h.length-1];if(x.from===t&&x.to===f)p+=34}if(h.length>=3){const a=h[h.length-1],c=h[h.length-3];if(a.from===t&&a.to===f&&c.from===t&&c.to===f)p+=55}return p}
+function quietRearPenalty(move){const[from,to]=move,d=board[to];if(d)return 0;const a=board[from],adv=(aiSide==='blue'?Math.floor(to/10)-Math.floor(from/10):Math.floor(from/10)-Math.floor(to/10));if(turnCount-lastBattleTurn>8&&adv<=0&&ownAdvanceDepth(to)<3&&['2','4','5','6'].includes(a.id))return 18;return 0}
+function reserveMinerPenalty(move){const[from,to]=move,a=board[from],d=board[to];if(!a||a.uid!==reserveMiner)return 0;if(d&&aiKnows(d)&&d.id==='B')return 0;const miners=board.filter(p=>p&&p.side===aiSide&&p.id==='3').length;if(miners<=1)return 90;if(turnCount<70)return 35;return 8}
+function aiFlagPos(bd=board){for(let i=0;i<100;i++){const p=bd[i];if(p&&p.side===aiSide&&p.id==='F')return i}return -1}
+function enemyMinerThreatAlive(){return aliveKnownEnemy('3')}
+function flagGuardSuitability(p){if(!p||p.side!==aiSide||!movable(p.id)||p.id==='3')return 0;if(['5','6','7','8'].includes(p.id))return 1;if(p.id==='4')return .75;if(p.id==='2')return .45;if(p.id==='9')return .6;if(p.id==='10')return .45;if(p.id==='S')return .15;return 0}
+function flagDefenseScoreFor(bd){
+ const f=aiFlagPos(bd);if(f<0||!enemyMinerThreatAlive())return 0;let s=0,guards=[];
+ // The bomb shell matters, but a miner can open it; mobile overlapping coverage is the real defence.
+ for(let i=0;i<100;i++){const p=bd[i];if(!p)continue;const d=manhattan(i,f);if(p.side===aiSide&&p.id==='B'&&d===1)s+=16;const q=flagGuardSuitability(p);if(q&&d>=1&&d<=4)guards.push(q*(5-d+1)*10)}
+ guards.sort((a,b)=>b-a);if(guards[0])s+=guards[0];if(guards[1])s+=guards[1]*.85;if(guards[2])s+=guards[2]*.4;
+ // Two useful guards are substantially better than one irreplaceable sentry.
+ if(guards.length>=2)s+=24;else if(guards.length===1)s-=24;else s-=90;
+ return s
+}
+function flagDefenseDelta(move){
+ if(!enemyMinerThreatAlive())return 0;const before=flagDefenseScoreFor(board),[from,to]=move,d=board[to];const bd=board.map(p=>p?{...p}:null);
+ if(!d){bd[to]=bd[from];bd[from]=null}else if(d.side===playerSide){if(aiKnows(d)){const r=battleResult(bd[from],d);if(r>0){bd[to]=bd[from];bd[from]=null}else if(r<0)bd[from]=null;else{bd[from]=null;bd[to]=null}}else{bd[to]=bd[from];bd[from]=null}}
+ return flagDefenseScoreFor(bd)-before
+}
+function flagInterceptBonus(move){
+ if(!enemyMinerThreatAlive())return 0;const[from,to]=move,a=board[from],d=board[to],f=aiFlagPos();if(f<0||!a||!d||d.side!==playerSide)return 0;
+ const dist=manhattan(to,f);if(dist>5)return 0;
+ // A known non-miner is not a miner threat. An unknown piece that has advanced here has necessarily moved,
+ // and therefore remains a possible miner until identified.
+ let threat=false;if(aiKnows(d))threat=d.id==='3';else threat=humanMoved.has(d.uid)||recentlyMovedHuman(d);if(!threat)return 0;
+ let b=(6-dist)*22;if(aiKnows(d)&&d.id==='3')b+=75;
+ // Prefer ordinary mobile officers for interception; do not burn the marshal/spy unless necessary.
+ if(['4','5','6','7','8'].includes(a.id))b+=18;if(['9','10','S'].includes(a.id))b-=18;if(a.id==='3')b-=80;
+ return b
+}
+
+function openingCalmAdjustment(move){
+ const[from,to]=move,a=board[from];
+ if(!a||a.side!==aiSide||aiMoveCount>=11)return 0;
+
+ const fr=Math.floor(from/10),tr=Math.floor(to/10);
+ const adv=aiSide==='blue'?tr-fr:fr-tr;
+ const crosses=onOpponentSide(to)&&!onOpponentSide(from);
+ const col=to%10, flank=(col<=2||col>=7);
+ let s=0;
+
+ // Spejaren är öppningens naturliga känselspröt.
+ if(a.id==='2'){
+   if(adv>0)s+=aiMoveCount<5?10:5;
+   if(manhattan(from,to)>1)s+=aiMoveCount<5?5:2;
+   if(flank&&adv>0)s+=4;
+   // Den får anfalla/korsa, men vi behöver inte tvinga fram det.
+   if(crosses)s+=1;
+   return s;
+ }
+
+ // Första fem egna dragen: låt främst billiga kontaktpjäser och redan
+ // aktiverade pjäser göra jobbet. Tunga pjäser ska inte rusa fram.
+ if(aiMoveCount<5){
+   if(['9','10','S'].includes(a.id)&&adv>0)s-=14;
+   else if(['7','8'].includes(a.id)&&adv>0)s-=9;
+   else if(a.id==='6'&&adv>0)s-=5;
+
+   if(crosses){
+     if(['7','8','9','10','S'].includes(a.id))s-=18;
+     else if(a.id==='6')s-=9;
+   }
+ }else{
+   // Drag 6–10: bromsen släpper gradvis.
+   if(['9','10','S'].includes(a.id)&&adv>0)s-=7;
+   else if(['7','8'].includes(a.id)&&adv>0)s-=4;
+   if(crosses&&['8','9','10','S'].includes(a.id))s-=9;
+ }
+
+ // Flankinitiativ med 4/5/6 är fortfarande helt okej.
+ if(flank&&adv>0&&['4','5','6'].includes(a.id))s+=3;
+
+ // Undvik att aktivera en ny officer varje enda drag i öppningen.
+ // Fortsätt hellre med de få pjäser som redan börjat skapa spel.
+ const moved=new Set(aiMoveHistory.map(x=>x.uid));
+ if(aiMoveCount<8 && a.id!=='2' && !moved.has(a.uid) && moved.size>=3){
+   s-=Math.min(12,(moved.size-2)*4);
+ }
+
+ return s;
+}
+
+function strategicRootBonus(move){const[from,to]=move,a=board[from],d=board[to];if(!a)return -9999;let s=0;
+ s+=guardDelta(move)*1.1;s+=flagDefenseDelta(move)*1.7;s+=flagInterceptBonus(move)*1.25;s+=probeBonus(move);s-=minerProbePenalty(move);s-=minerAdvancePenalty(move);s-=revealPenalty(move);s-=highExposurePenaltyAt(to,a);s-=repetitionPenalty(move);s-=quietRearPenalty(move);s-=reserveMinerPenalty(move);
+ if(d&&aiKnows(d))s+=knownBattleScore(a,d);
+ const fr=Math.floor(from/10),tr=Math.floor(to/10),adv=aiSide==='blue'?tr-fr:fr-tr;
+ // More life in the opening: cheap pieces may advance and cross the line to make contact.
+ if(['2','4'].includes(a.id)){s+=adv*(aiMoveCount<18?7:4);if(onOpponentSide(to)&&!onOpponentSide(from))s+=aiMoveCount<20?12:5}
+ else if(a.id==='5')s+=adv*(aiMoveCount<18?3:2);else s+=adv*1.1;
+ // Expensive hidden pieces should prefer being the second line, not the first line.
+ if(['9','10','S'].includes(a.id)&&!a.knownToHuman){if(ownAdvanceDepth(to)>=4)s-=16;if(!d)s+=Math.min(9,unknownHumanWithin(to,3))*0.5}
+ s+=openingCalmAdjustment(move);
+ return s;
+}
+// ----------------------- Växlaren: position-driven strategy -----------------------
+const SWITCH_MATERIAL_VALUE={B:38,S:45,'2':22,'3':58,'4':34,'5':46,'6':62,'7':82,'8':112,'9':155,'10':225};
+function seenHumanCount(){let n=0;for(const p of board)if(p&&p.side===playerSide&&p.knownToAI)n++;return n}
+function ownRemainingCounts(){const c={F:0,B:0,S:0,'2':0,'3':0,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0};for(const p of board)if(p&&p.side===aiSide)c[p.id]=(c[p.id]||0)+1;return c}
+function opponentRemainingCountsKnown(){const c={F:1,B:6,S:1,'2':8,'3':5,'4':4,'5':4,'6':4,'7':3,'8':2,'9':1,'10':1};for(const[id,n]of Object.entries(humanKnownLosses||{}))c[id]=Math.max(0,(c[id]||0)-n);return c}
+function materialPoints(c){let s=0;for(const[id,v]of Object.entries(SWITCH_MATERIAL_VALUE))s+=(c[id]||0)*v;return s}
+function highestOfficer(c){for(const id of ['10','9','8','7','6','5','4','3','2'])if((c[id]||0)>0)return Number(id);return 0}
+function switcherStrengthState(){
+ const own=ownRemainingCounts(),opp=opponentRemainingCountsKnown();
+ const ownPts=materialPoints(own),oppPts=materialPoints(opp),pointLead=ownPts-oppPts;
+ const ownHigh=highestOfficer(own),oppHigh=highestOfficer(opp),ownSpy=(own.S||0)>0,oppSpy=(opp.S||0)>0;
+ const ownMiners=own['3']||0,oppMiners=opp['3']||0;
+ let highControl=ownHigh>oppHigh?1:ownHigh<oppHigh?-1:0;
+ if(ownHigh===10&&oppSpy)highControl-=.35;if(oppHigh===10&&ownSpy)highControl+=.35;
+ let special=0;if(ownSpy&&!oppSpy)special+=18;if(!ownSpy&&oppSpy)special-=18;special+=(ownMiners-oppMiners)*8;
+ return{own,opp,ownPts,oppPts,pointLead,effectiveLead:pointLead+special,ownHigh,oppHigh,highControl,ownSpy,oppSpy,ownMiners,oppMiners};
+}
+function updateSwitcherPhase(){
+ const s=switcherStrengthState();
+ const clearlyBehind=s.effectiveLead<=-115||(s.effectiveLead<=-65&&s.highControl<0);
+ if(clearlyBehind){switcherPhase='defensiv';return{phase:switcherPhase,...s}}
+ if(switcherPhase==='offensiv'){
+   const lostAttackBasis=s.effectiveLead<-35||(s.highControl<-.35&&s.effectiveLead<55);
+   if(lostAttackBasis)switcherPhase='sonderande';
+ }
+ if(switcherPhase==='defensiv'){
+   const enoughInformation=Object.values(humanKnownLosses||{}).reduce((a,b)=>a+b,0)>=2||seenHumanCount()>=4;
+   const balancedEnough=s.effectiveLead>=-35&&s.highControl>=-.35;
+   const materialGood=s.effectiveLead>=110&&s.highControl>=-.65;
+   if(enoughInformation&&(balancedEnough||materialGood))switcherPhase='sonderande';
+ }
+ if(switcherPhase==='sonderande'){
+   const materialAndTop=s.effectiveLead>=70&&s.highControl>=0;
+   const topAndEven=s.highControl>.45&&s.effectiveLead>=0;
+   const crushingMaterial=s.effectiveLead>=210&&s.highControl>=-.35;
+   if(materialAndTop||topAndEven||crushingMaterial)switcherPhase='offensiv';
+ }
+ return{phase:switcherPhase,...s};
+}
+function switcherProfile(){const sw=updateSwitcherPhase();if(sw.phase==='defensiv')return{phase:'defensiv',aggression:.74,safety:1.44,info:.92,flank:.78,risk:1.52,initiative:.68,minerReserve:1.85,backRaid:0,strength:sw};if(sw.phase==='sonderande')return{phase:'sonderande',aggression:1.02,safety:1.08,info:1.30,flank:1.12,risk:.92,initiative:1.12,minerReserve:1.15,backRaid:.55,strength:sw};return{phase:'offensiv',aggression:1.48,safety:.72,info:1.22,flank:1.38,risk:.50,initiative:1.68,minerReserve:.38,backRaid:1.70,strength:sw}}
+function stationaryUnknownBackTargets(){const row=opponentBackRow(),out=[];for(let c=0;c<10;c++){const pos=row*10+c,p=board[pos];if(!p||p.side!==playerSide||p.knownToAI||humanMoved.has(p.uid))continue;out.push(pos)}return out}
+function switcherBackRaidBonus(move){const profile=switcherProfile();if(profile.backRaid<=0)return 0;const[from,to]=move,a=board[from],d=board[to];if(!a||a.side!==aiSide||!['2','3','4','5','6','7','8','9'].includes(a.id))return 0;const targets=stationaryUnknownBackTargets();if(!targets.length)return 0;const before=Math.min(...targets.map(x=>manhattan(from,x))),after=Math.min(...targets.map(x=>manhattan(to,x)));let b=(before-after)*10*profile.backRaid;if(d&&d.side===playerSide&&!d.knownToAI&&!humanMoved.has(d.uid)&&Math.floor(to/10)===opponentBackRow())b+=(profile.phase==='offensiv'?48:18)*profile.backRaid;if(after<=3)b+=8*profile.backRaid;return b}
+function switcherMinerPenalty(move){const profile=switcherProfile(),[from,to]=move,a=board[from],d=board[to];if(!a||a.side!==aiSide||a.id!=='3')return 0;if(d&&d.side===playerSide&&d.knownToAI&&d.id==='B')return 0;const miners=board.filter(p=>p&&p.side===aiSide&&p.id==='3').length;if(miners<=1)return 72;if(miners===2)return 28*profile.minerReserve;return 13*profile.minerReserve}
+function aiScore(move){
+ const sw=switcherProfile(),[from,to]=move,a=board[from];let s=strategicRootBonus(move);
+ if(a){const fr=Math.floor(from/10),tr=Math.floor(to/10),adv=aiSide==='blue'?tr-fr:fr-tr;s+=adv*4*(sw.aggression*sw.initiative-1);if(onOpponentSide(to)&&!onOpponentSide(from))s+=(sw.phase==='offensiv'?13:sw.phase==='sonderande'?2:-12)*sw.safety}
+ s+=switcherBackRaidBonus(move);s-=switcherMinerPenalty(move);return s+Math.random()*.7;
+}
+
+// ----------------------- full honest selective search -----------------------
+const ENGINE_VALUE={F:5000,B:38,S:45,'2':22,'3':58,'4':34,'5':46,'6':62,'7':82,'8':112,'9':155,'10':225};
+function enginePieceValue(id){return ENGINE_VALUE[String(id)]||42}
+function engineInitialCounts(){const x={};for(const d of defs)x[String(d.id)]=d.n;return x}
+function engineKnowledgeBoard(){return board.map(p=>{if(!p)return null;if(p.side===aiSide)return{side:'A',id:String(p.id),known:true,moved:true,uid:p.uid||''};const known=!!p.knownToAI;return{side:'H',id:known?String(p.id):'?',known,moved:humanMoved.has(p.uid),uid:p.uid||''}})}
+function engineCandidateCounts(state,movingUnknown=false){const counts=engineInitialCounts();for(const[id,n]of Object.entries(humanKnownLosses||{}))counts[id]=Math.max(0,(counts[id]||0)-n);for(const p of state)if(p&&p.side==='H'&&p.known&&p.id!=='?')counts[p.id]=Math.max(0,(counts[p.id]||0)-1);if(movingUnknown){counts.F=0;counts.B=0}return counts}
+function engineCandidatesFor(piece,state,asMover=false){if(!piece||piece.side!=='H'||piece.known||piece.id!=='?')return piece&&piece.id!=='?'?[[String(piece.id),1]]:[];const counts=engineCandidateCounts(state,asMover||piece.moved),out=[];for(const id of ['F','B','S','2','3','4','5','6','7','8','9','10']){const n=counts[id]||0;if(n>0)out.push([id,n])}if(!out.length)for(const id of ['S','2','3','4','5','6','7','8','9','10'])out.push([id,1]);return out}
+function engineExpectedHumanValue(piece,state){if(!piece)return 0;if(piece.known&&piece.id!=='?')return enginePieceValue(piece.id);const cs=engineCandidatesFor(piece,state,false);let s=0,w=0;for(const[id,n]of cs){s+=enginePieceValue(id)*n;w+=n}return w?s/w:42}
+function engineBattleResultIds(attacker,defender){const a=String(attacker),d=String(defender);if(d==='F')return 1;if(d==='B')return a==='3'?1:-1;if(a==='S'&&d==='10')return 1;if(a==='10'&&d==='S')return 1;const sa=a==='S'?1:Number(a),sd=d==='S'?1:Number(d);return sa>sd?1:sa<sd?-1:0}
+function engineExpectedUnknownBattleDelta(state,attacker,defender,attackerSide){if(attackerSide==='A'&&defender.side==='H'&&!defender.known){const cs=engineCandidatesFor(defender,state,false);let total=0,w=0;for(const[hid,n]of cs){const res=engineBattleResultIds(attacker.id,hid);let d=0;if(res>0)d+=enginePieceValue(hid);else if(res<0)d-=enginePieceValue(attacker.id);else d+=enginePieceValue(hid)-enginePieceValue(attacker.id);if(hid==='F'&&res>0)d+=4000;total+=d*n;w+=n}return w?total/w:-20}if(attackerSide==='H'&&!attacker.known&&defender.side==='A'){const cs=engineCandidatesFor(attacker,state,true);let total=0,w=0;for(const[hid,n]of cs){const res=engineBattleResultIds(hid,defender.id);let d=0;if(res>0)d-=enginePieceValue(defender.id);else if(res<0)d+=enginePieceValue(hid);else d+=enginePieceValue(hid)-enginePieceValue(defender.id);total+=d*n;w+=n}return w?total/w:-10}return 0}
+function engineGenerateMoves(state,side){const out=[];for(let i=0;i<100;i++){const p=state[i];if(!p||p.side!==side)continue;if(p.known&&(p.id==='F'||p.id==='B'))continue;const r=Math.floor(i/10),c=i%10,max=(p.known&&p.id==='2')?9:1;for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]])for(let step=1;step<=max;step++){const nr=r+dr*step,nc=c+dc*step;if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;const j=nr*10+nc,t=state[j];if(!t){out.push([i,j]);continue}if(t.side!==side)out.push([i,j]);break}}return out}
+function engineCloneState(state){return state.map(p=>p?{...p}:null)}
+function engineApplyCertainMove(state,move,side){const[from,to]=move,a=state[from],d=state[to];if(!a)return{state,terminalDelta:0,uncertain:true};if(!d){const ns=engineCloneState(state);ns[to]={...a,moved:true};ns[from]=null;return{state:ns,terminalDelta:0,uncertain:false}}if((a.side==='H'&&!a.known)||(d.side==='H'&&!d.known)){return{state,terminalDelta:engineExpectedUnknownBattleDelta(state,a,d,side),uncertain:true}}const res=engineBattleResultIds(a.id,d.id),ns=engineCloneState(state);if(d.id==='F'&&res>0)return{state:ns,terminalDelta:side==='A'?100000:-100000,uncertain:true};if(res>0){ns[to]={...a,moved:true};ns[from]=null}else if(res<0)ns[from]=null;else{ns[from]=null;ns[to]=null}return{state:ns,terminalDelta:0,uncertain:false}}
+function engineStaticEval(state){const sw=switcherProfile();let score=0,aiCount=0,hCount=0;for(let i=0;i<100;i++){const p=state[i];if(!p)continue;const r=Math.floor(i/10),c=i%10;if(p.side==='A'){aiCount++;score+=enginePieceValue(p.id);const adv=aiSide==='blue'?r:9-r;score+=adv*1.2*sw.aggression;const ownFront=aiSide==='blue'?r===3:r===6;if(ownFront&&['6','7','8'].includes(p.id))score+=12;const br=aiSide==='blue'?r-1:r+1;if(br>=0&&br<10){const q=state[br*10+c];if(q&&q.side==='A')score+=3}const enemySide=aiSide==='blue'?r>=6:r<=3;if(enemySide)score-=5*sw.safety/Math.max(.65,sw.initiative);if(p.id==='S')score+=12;if(p.id==='3')score+=5;if(['9','10'].includes(p.id))score+=8}else{hCount++;score-=p.known?enginePieceValue(p.id):engineExpectedHumanValue(p,state)}}score+=(aiCount-hCount)*7;for(let i=0;i<100;i++){const p=state[i];if(!p||p.side!=='A')continue;const r=Math.floor(i/10),c=i%10;let unknownAdj=0,knownBad=0;for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>9||nc<0||nc>9)continue;const q=state[nr*10+nc];if(!q||q.side!=='H')continue;if(!q.known)unknownAdj++;else if(engineBattleResultIds(q.id,p.id)>0)knownBad++}const v=enginePieceValue(p.id);score-=sw.safety*unknownAdj*Math.min(18,v*.10);score-=sw.safety*knownBad*Math.min(70,v*.35)}return score}
+function engineMoveOrderScore(state,move,side){const sw=switcherProfile(),[f,t]=move,a=state[f],d=state[t];if(!a)return-9999;let s=0;const fr=Math.floor(f/10),tr=Math.floor(t/10),advance=side==='A'?(aiSide==='blue'?tr-fr:fr-tr):(playerSide==='red'?fr-tr:tr-fr);s+=advance*2*(side==='A'?sw.aggression*sw.initiative:1);if(d){if(side==='A'){if(d.side==='H'&&d.known){const r=engineBattleResultIds(a.id,d.id);if(r>0)s+=120+enginePieceValue(d.id)*.5;else if(r<0)s-=100;else s-=20}else if(d.side==='H')s+=engineExpectedUnknownBattleDelta(state,a,d,'A')*.35}else{if(a.known&&d.side==='A'){const r=engineBattleResultIds(a.id,d.id);if(r>0)s+=100+enginePieceValue(d.id)*.4}else if(!a.known&&d.side==='A')s+=Math.max(0,-engineExpectedUnknownBattleDelta(state,a,d,'H'))*.35}}if(side==='A'){const last=aiMoveHistory[aiMoveHistory.length-1];if(last&&last.from===t&&last.to===f)s-=32}return s}
+function engineOrderedMoves(state,side,limit){let ms=engineGenerateMoves(state,side);ms.sort((x,y)=>engineMoveOrderScore(state,y,side)-engineMoveOrderScore(state,x,side));if(limit&&ms.length>limit)ms=ms.slice(0,limit);return ms}
+function engineSearch(state,side,depth,alpha,beta,ctx,ply){if((ctx.nodes++&31)===0&&performance.now()>=ctx.deadline)throw ctx.timeoutToken;if(depth<=0)return engineStaticEval(state);const beam=depth>=6?5:depth===5?6:depth===4?7:8,moves=engineOrderedMoves(state,side,beam);if(!moves.length)return side==='A'?-90000+ply:90000-ply;if(side==='A'){let best=-Infinity;for(const m of moves){const tr=engineApplyCertainMove(state,m,'A');const val=tr.uncertain?engineStaticEval(state)+tr.terminalDelta:engineSearch(tr.state,'H',depth-1,alpha,beta,ctx,ply+1);if(val>best)best=val;if(best>alpha)alpha=best;if(beta<=alpha)break}return best}else{let best=Infinity;for(const m of moves){const tr=engineApplyCertainMove(state,m,'H');const val=tr.uncertain?engineStaticEval(state)+tr.terminalDelta:engineSearch(tr.state,'A',depth-1,alpha,beta,ctx,ply+1);if(val<best)best=val;if(best<beta)beta=best;if(beta<=alpha)break}return best}}
+function enginePositionComplexity(){let contacts=0,highContacts=0,known=seenHumanCount();for(let i=0;i<100;i++){const p=board[i];if(!p||p.side!==aiSide)continue;const r=Math.floor(i/10),c=i%10;for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>9||nc<0||nc>9)continue;const q=board[nr*10+nc];if(q&&q.side===playerSide){contacts++;if(['8','9','10'].includes(p.id))highContacts++}}}return{contacts,highContacts,known,moves:strictMoves(aiSide).length}}
+function honestHumanMovesForThreat(){const out=[];for(let i=0;i<100;i++){const p=board[i];if(!p||p.side!==playerSide)continue;if(p.knownToAI&&!movable(p.id))continue;const unknown=!p.knownToAI,r=Math.floor(i/10),c=i%10,max=(!unknown&&p.id==='2')?9:1;for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]])for(let step=1;step<=max;step++){const nr=r+dr*step,nc=c+dc*step;if(nr<0||nr>9||nc<0||nc>9||isLake(nr,nc))break;const j=nr*10+nc,t=board[j];if(!t)out.push([i,j]);else{if(t.side!==playerSide)out.push([i,j]);break}}}return out}
+function immediateThreatPenaltyAfter(move){const saved=board.map(p=>p?{...p}:null),[f,t]=move,a=board[f],d=board[t];if(!a)return 0;if(!d){board[t]=a;board[f]=null}else if(d.knownToAI){const r=battleResult(a,d);if(r>0){board[t]=a;board[f]=null}else if(r<0)board[f]=null;else{board[f]=null;board[t]=null}}else{board[t]=a;board[f]=null}let worst=0;for(const[rf,rt]of honestHumanMovesForThreat()){const ha=board[rf],ad=board[rt];if(!ad||ad.side!==aiSide)continue;let risk;if(ha.knownToAI){const r=battleResult(ha,ad);risk=r>0?enginePieceValue(ad.id)*.72:r===0?enginePieceValue(ad.id)*.2:-5}else risk=enginePieceValue(ad.id)*.22;if(risk>worst)worst=risk}board=saved;return worst}
+function engineThinkBudgetMs(){const x=enginePositionComplexity(),sw=switcherProfile();let ms=2200;ms+=Math.min(3500,x.contacts*600);ms+=Math.min(2100,x.known*145);if(x.moves>=28)ms+=900;if(x.highContacts>=1)ms+=2200;if(x.highContacts>=2||x.contacts>=5)ms+=2500;if(x.contacts>=7)ms+=1500;if(turnCount>=55)ms+=900;if(turnCount-lastBattleTurn>10)ms+=650;if(sw.phase==='sonderande')ms+=700;if(sw.phase==='offensiv')ms+=1200;const probes=strictMoves(aiSide).filter(m=>probeBonus(m)>0).length;if(probes)ms+=Math.min(1600,500+probes*220);return Math.max(2200,Math.min(15000,ms))}
+function engineYield(){return new Promise(r=>setTimeout(r,0))}
+async function engineChooseMove(realMoves){assertAIFirewall();const start=performance.now(),budget=engineThinkBudgetMs(),deadline=start+budget,state=engineKnowledgeBoard(),timeoutToken={engineTimeout:true},ctx={deadline,nodes:0,timeoutToken};let ordered=realMoves.map(m=>({m,score:aiScore(m)-immediateThreatPenaltyAfter(m)})).sort((a,b)=>b.score-a.score),bestMove=ordered[0].m,bestDepth=0,completed=ordered.map(x=>({m:x.m,score:x.score}));for(let depth=2;depth<=8;depth++){if(performance.now()>=deadline)break;const rootLimit=depth===2?Math.min(24,completed.length):depth===3?Math.min(18,completed.length):depth===4?Math.min(14,completed.length):depth===5?Math.min(11,completed.length):depth===6?Math.min(9,completed.length):7,roots=completed.slice(0,rootLimit),scores=[];let complete=true;for(let k=0;k<roots.length;k++){if(performance.now()>=deadline){complete=false;break}const m=roots[k].m;try{const tr=engineApplyCertainMove(state,m,'A');let val=tr.uncertain?engineStaticEval(state)+tr.terminalDelta:engineSearch(tr.state,'H',depth-1,-Infinity,Infinity,ctx,1);val+=aiScore(m)*.13;val+=strategicRootBonus(m)*.22;scores.push({m,score:val})}catch(e){if(e===timeoutToken||e.engineTimeout){complete=false;break}throw e}if((k&1)===1){status.textContent='Datorn tänker… '+((performance.now()-start)/1000).toFixed(1).replace('.',',')+' s · djup '+depth;await engineYield()}}if(complete&&scores.length===roots.length){scores.sort((a,b)=>b.score-a.score);bestMove=scores[0].m;bestDepth=depth;const keys=new Set(scores.map(x=>x.m[0]+'-'+x.m[1]));completed=scores.concat(completed.filter(x=>!keys.has(x.m[0]+'-'+x.m[1])))}else break}lastEngineStats={timeMs:Math.round(performance.now()-start),depth:bestDepth||1,nodes:ctx.nodes};return bestMove}
+function switcherCombatPoints(c){let s=0;for(const id of ['S','2','3','4','5','6','7','8','9','10'])s+=(c[id]||0)*(SWITCH_MATERIAL_VALUE[id]||0);return s}
+function switcherMovableCountFromCounts(c){let n=0;for(const id of ['S','2','3','4','5','6','7','8','9','10'])n+=(c[id]||0);return n}
+function resignationAssessment(){const s=switcherStrengthState(),ownCombat=switcherCombatPoints(s.own),oppCombat=switcherCombatPoints(s.opp),combatLead=ownCombat-oppCombat,ownMov=switcherMovableCountFromCounts(s.own),oppMov=switcherMovableCountFromCounts(s.opp);const humanLosses=Object.values(humanKnownLosses||{}).reduce((a,b)=>a+b,0),ownStart={S:1,'2':8,'3':5,'4':4,'5':4,'6':4,'7':3,'8':2,'9':1,'10':1};let ownLosses=0;for(const[id,n]of Object.entries(ownStart))ownLosses+=Math.max(0,n-(s.own[id]||0));if(humanLosses+ownLosses<8){resignBadCount=0;return{resign:false,s,ownCombat,oppCombat}}const catastrophic=combatLead<=-360&&s.highControl<=.35,tinyArmy=ownMov<=5&&oppMov>=9&&s.highControl<=0&&combatLead<=-180;if(catastrophic||tinyArmy){resignBadCount=2;return{resign:true,s,ownCombat,oppCombat}}const clearlyBad=(combatLead<=-220&&s.highControl<=0)||(combatLead<=-150&&s.highControl<=-.65);if(clearlyBad)resignBadCount++;else if(combatLead>-110||s.highControl>.35)resignBadCount=0;else resignBadCount=Math.max(0,resignBadCount-1);return{resign:resignBadCount>=2,s,ownCombat,oppCombat}}
+async function computerTurn(){
+ if(gameOver)return;
+ busy=true;
+
+ let firewall=null,choice=null,moves=[],res=null,phase='defensiv';
+ try{
+   firewall=beginAIFirewall();
+
+   // Från och med nu är alla dolda människograder fysiskt '?'.
+   res=resignationAssessment();
+   if(res.resign){
+     endAIFirewall(firewall);firewall=null;
+     gameOver=true;busy=false;
+     status.textContent='Datorn ger upp. Du vann!';
+     updateUndoButtons();draw();saveGame();
+     setTimeout(()=>showEnd('win','Datorn kapitulerar.'),160);
+     return;
+   }
+
+   moves=strictMoves(aiSide);
+   if(!moves.length){
+     endAIFirewall(firewall);firewall=null;
+     gameOver=true;busy=false;
+     status.textContent='Datorn kan inte flytta. Du vann!';
+     draw();saveGame();
+     setTimeout(()=>showEnd('win','Motståndaren har inga möjliga drag kvar.'),160);
+     return;
+   }
+
+   phase=switcherProfile().phase;
+   status.textContent='Datorn tänker… · '+phase;
+   await new Promise(r=>setTimeout(r,60));
+
+   assertAIFirewall();
+   try{
+     choice=await engineChooseMove(moves);
+   }catch(e){
+     // Även reservvalet görs på det maskerade brädet.
+     assertAIFirewall();
+     choice=moves.slice().sort((a,b)=>aiScore(b)-aiScore(a))[0];
+   }
+   assertAIFirewall();
+
+ }finally{
+   // Riktiga grader återställs först EFTER att från/till-ruta valts.
+   if(firewall)endAIFirewall(firewall);
+ }
+
+ if(!choice||!moves.some(m=>m[0]===choice[0]&&m[1]===choice[1]))choice=moves[0];
+
+ resolveMove(choice[0],choice[1],()=>{
+   busy=false;
+   if(!gameOver){
+     const sw=switcherProfile(),
+           sec=(lastEngineStats.timeMs/1000).toFixed(1).replace('.',',');
+     status.textContent='Din tur. Datorn tänkte '+sec+' s · djup '+
+       lastEngineStats.depth+' · '+
+       Number(lastEngineStats.nodes||0).toLocaleString('sv-SE')+
+       ' noder · '+sw.phase+'.';
+   }
+   draw();saveGame();
+ });
+}
+
+function serializableState(){return{mode,setup,board,gameOver,history,playerSide,aiSide,boardFlipped,memoryMode,aiLosses,humanKnownLosses,humanMoved:[...humanMoved],aiSeenHuman:[...aiSeenHuman],aiMoveHistory,humanMoveTrail,aiMoveCount,turnCount,lastBattleTurn,lastAiMoveSquare,reserveMiner,resignBadCount,switcherPhase,statusText:status.textContent}}
+function saveGame(){if(aiFirewallActive)return;try{if(mode==='play')localStorage.setItem(SAVE_KEY,JSON.stringify(serializableState()))}catch(e){}}
+function clearSavedGame(){try{localStorage.removeItem(SAVE_KEY)}catch(e){}document.getElementById('resume').style.display='none';document.getElementById('clearSave').style.display='none'}
+function restoreGame(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;const s=JSON.parse(raw);mode='play';setup=s.setup||setup;board=(s.board||board).map(p=>p?{...p}:null);gameOver=!!s.gameOver;history=s.history||[];historyEl.innerHTML=history.map(x=>'• '+x).join('<br>');playerSide=s.playerSide||'red';aiSide=s.aiSide||'blue';boardFlipped=!!s.boardFlipped;memoryMode=s.memoryMode||'open';aiLosses=s.aiLosses||{};humanKnownLosses=s.humanKnownLosses||{};humanMoved=new Set(s.humanMoved||[]);aiSeenHuman=new Set(s.aiSeenHuman||[]);aiMoveHistory=s.aiMoveHistory||[];humanMoveTrail=s.humanMoveTrail||[];aiMoveCount=s.aiMoveCount||0;turnCount=s.turnCount||0;lastBattleTurn=s.lastBattleTurn||0;lastAiMoveSquare=s.lastAiMoveSquare??null;reserveMiner=s.reserveMiner||null;resignBadCount=s.resignBadCount||0;switcherPhase=s.switcherPhase||'defensiv';selected=null;targets=[];busy=false;setupPlayControls();status.textContent=s.statusText||'Partiet återupptogs.';updateLossPanel();draw();return true}catch(e){return false}}
+function setupPlayControls(){document.getElementById('smart').style.display='none';document.getElementById('random').style.display='none';document.getElementById('playerColor').style.display='none';document.getElementById('difficulty').style.display='none';document.getElementById('start').style.display='none';document.getElementById('resume').style.display='none';document.getElementById('drawOffer').style.display='inline-block';document.getElementById('new').style.display='inline-block';document.getElementById('clearSave').style.display='inline-block';updateUndoButtons()}
+function startGame(){
+ playerSide=document.getElementById('playerColor').value;aiSide=playerSide==='red'?'blue':'red';boardFlipped=playerSide==='blue';memoryMode=document.getElementById('difficulty').value==='colonel'?'memory':'open';board=Array(100).fill(null);
+ if(playerSide==='red'){for(let i=0;i<40;i++)board[60+i]={id:String(setup[i]),side:'red',revealed:true,knownToAI:false,knownToHuman:true,uid:'H'+i};const ai=smartAI();for(let i=0;i<40;i++)board[i]={id:String(ai[39-i]),side:'blue',revealed:false,knownToAI:true,knownToHuman:false,uid:'A'+i}}
+ else{for(let i=0;i<40;i++)board[i]={id:String(setup[39-i]),side:'blue',revealed:true,knownToAI:false,knownToHuman:true,uid:'H'+i};const ai=smartAI();for(let i=0;i<40;i++)board[60+i]={id:String(ai[i]),side:'red',revealed:false,knownToAI:true,knownToHuman:false,uid:'A'+i}}
+ mode='play';selected=null;targets=[];busy=false;gameOver=false;history=[];historyEl.innerHTML='';aiLosses={};humanKnownLosses={};humanMoved=new Set();aiSeenHuman=new Set();aiMoveHistory=[];humanMoveTrail=[];aiMoveCount=0;turnCount=0;lastBattleTurn=0;lastAiMoveSquare=null;resignBadCount=0;switcherPhase='defensiv';undoSnapshot=null;awaitingAiReplay=false;
+ const miners=board.filter(p=>p&&p.side===aiSide&&p.id==='3');reserveMiner=miners.length?miners[Math.floor(Math.random()*miners.length)].uid:null;setupPlayControls();updateLossPanel();draw();saveGame();
+ if(playerSide==='red'){status.textContent='Din tur. Du spelar rött.';runOpening()}else{status.textContent='Datorn öppnar. Du spelar blått.';runOpening();setTimeout(()=>computerTurn(),1650)}
+}
+function draw(){boardEl.innerHTML='';for(let vr=0;vr<10;vr++)for(let vc=0;vc<10;vc++){const r=boardFlipped?9-vr:vr,c=boardFlipped?9-vc:vc,pos=r*10+c,sq=document.createElement('div');sq.className='sq';if(isLake(r,c))sq.classList.add('lake');if(mode==='setup'&&r>=6){const i=(r-6)*10+c,id=setup[i];if(i===selected)sq.classList.add('selected');const pc=makePiece(id,'red');pc.style.setProperty('--deploy-delay',((vr*10+vc)*9)+'ms');pc.style.setProperty('--deploy-y','20px');sq.appendChild(pc);sq.onclick=()=>setupTap(i)}else if(mode==='play'){const p=board[pos];if(pos===selected)sq.classList.add('selected');if(targets.includes(pos))sq.classList.add('target');if(pos===lastAiMoveSquare)sq.classList.add('last-ai-move');if(p){let hidden=false;if(p.side!==playerSide){hidden=memoryMode==='memory'?true:!p.revealed}const pc=makePiece(p.id,p.side==='red'?'red':'blue',hidden);pc.style.setProperty('--deploy-delay',((vr*10+vc)*7)+'ms');pc.style.setProperty('--deploy-y',(p.side===playerSide?'24px':'-24px'));sq.appendChild(pc)}sq.onclick=()=>playerTap(pos)}boardEl.appendChild(sq)}}
+
+document.getElementById('smart').onclick=()=>{setup=smart();selected=null;status.textContent='Ny vettigt slumpad uppställning.';draw()};document.getElementById('random').onclick=()=>{setup=shuffle(bag());selected=null;status.textContent='Helt slumpad uppställning.';draw()};document.getElementById('start').onclick=startGame;
+document.getElementById('undoMove').onclick=undoLastMove;document.getElementById('replayAI').onclick=replayComputerMove;
+document.getElementById('drawOffer').onclick=()=>{if(gameOver||busy)return;const aiN=board.filter(p=>p&&p.side===aiSide&&movable(p.id)).length,huN=board.filter(p=>p&&p.side===playerSide&&(p.knownToAI?movable(p.id):true)).length;let chance=.22;if(turnCount>70)chance+=.2;if(aiN<7||huN<7)chance+=.2;if(Math.random()<chance){gameOver=true;status.textContent='Datorn accepterade oavgjort.';document.getElementById('drawOffer').style.display='none';saveGame()}else status.textContent='Datorn avböjde oavgjort. Din tur.'};
+document.getElementById('new').onclick=()=>{clearSavedGame();location.reload()};document.getElementById('clearSave').onclick=clearSavedGame;document.getElementById('resume').onclick=restoreGame;
+setup=smart();draw();try{if(localStorage.getItem(SAVE_KEY)){document.getElementById('resume').style.display='inline-block';document.getElementById('clearSave').style.display='inline-block';status.textContent='Ett sparat parti finns.'}}catch(e){}
+window.addEventListener('beforeunload',()=>{try{saveGame()}catch(e){}});document.addEventListener('visibilitychange',()=>{if(document.hidden)try{saveGame()}catch(e){}});setInterval(()=>{if(mode==='play'&&!busy)saveGame()},4000);
+document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+})();
+</script>
+</body>
+</html>
